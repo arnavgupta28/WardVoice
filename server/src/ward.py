@@ -71,6 +71,25 @@ PATIENTS: List[Dict[str, Any]] = [
         "family": [{"name": "Ayesha Farooq", "relation": "Wife", "email": "ayesha@example.com", "consent": False}],
         "trend": {"hr": [112, 108, 102, 98, 95, 94, 92], "spo2": [96, 96, 97, 97, 97, 98, 98], "bp": [110, 112, 115, 118, 120, 121, 122]},
     },
+    # Extra blank beds so several live demo rounds can run without a reset.
+    {
+        "id": "P4", "bed": "16", "name": "Priya Sharma", "age": 47, "sex": "F", "mrn": "MRN-204503",
+        "ward": "Ward 4B", "diagnosis": "Heart failure exacerbation", "admitted_on": "2026-11-20",
+        "family": [{"name": "Arjun Sharma", "relation": "Husband", "email": "arjun@example.com", "consent": True}],
+        "trend": {"hr": [108, 104, 100, 96, 94, 92, 90], "spo2": [91, 92, 93, 94, 95, 95, 96], "bp": [150, 146, 142, 138, 136, 134, 132]},
+    },
+    {
+        "id": "P5", "bed": "17", "name": "Venkatesh Rao", "age": 69, "sex": "M", "mrn": "MRN-204528",
+        "ward": "Ward 4B", "diagnosis": "COPD exacerbation", "admitted_on": "2026-11-19",
+        "family": [{"name": "Meena Rao", "relation": "Daughter", "email": "meena@example.com", "consent": True}],
+        "trend": {"hr": [98, 96, 95, 93, 92, 90, 88], "spo2": [88, 89, 90, 91, 92, 92, 93], "bp": [136, 134, 132, 130, 130, 128, 128]},
+    },
+    {
+        "id": "P6", "bed": "18", "name": "Fatima Sheikh", "age": 62, "sex": "F", "mrn": "MRN-204561",
+        "ward": "Ward 4B", "diagnosis": "Post-op knee replacement, day 1", "admitted_on": "2026-11-20",
+        "family": [{"name": "Imran Sheikh", "relation": "Son", "email": "imran@example.com", "consent": True}],
+        "trend": {"hr": [86, 84, 82, 80, 80, 78, 78], "spo2": [96, 97, 97, 97, 98, 98, 98], "bp": [132, 130, 128, 126, 126, 124, 124]},
+    },
 ]
 _BY_ID = {p["id"]: p for p in PATIENTS}
 _BY_BED = {p["bed"]: p for p in PATIENTS}
