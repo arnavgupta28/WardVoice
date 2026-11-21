@@ -9,7 +9,7 @@ Deadline: **12:30 IST** on Commudle (our target 12:00).
 | 2 | Mobile app screens (doctor + family) | ✅ | phone frame, design tokens |
 | 3 | Backend: ward domain, MCP tools, REST, email template | ✅ | 19 tests pass |
 | 4 | Voice controls inside the round screen | ✅ | Start / Mute / End, live transcript, agent state |
-| 5 | **Keys: Agora App ID + certificate, Murf key** | 🔴 | **YOU:** `server/.env.local` still has the template placeholders |
+| 5 | **Keys: Agora App ID + certificate, Murf key** | 🟡 | Agora ✅ (tokens minting) · **Murf still a placeholder: YOU** |
 | 6 | Murf Falcon voice ID checked against the API | 🔴 | blocked on 5; `en-IN-priya` is a guess |
 | 7 | Public tunnel → `MCP_ENDPOINT` | ✅ | cloudflared running; URL written to `.env.local` (changes on restart) |
 | 8 | MCP reachable from the internet (host check) | ✅ | fixed 421 by restarting with the tunnel host |
