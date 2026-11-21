@@ -38,8 +38,9 @@ services:
     rootDir: web
     plan: free
     region: singapore
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    # Bun, not npm: agora-agent-uikit@1.1.0 ships a `workspace:*` dependency that only Bun resolves.
+    buildCommand: bun install && bun run build
+    startCommand: bun run start
     envVars:
       # Public URL of wardvoice-api. If Render adds a suffix to the service name, update this and redeploy.
       - key: AGENT_BACKEND_URL
