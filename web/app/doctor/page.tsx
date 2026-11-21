@@ -4,6 +4,7 @@ import { ArrowUpRight, BedDouble, Mic } from "lucide-react";
 import Link from "next/link";
 
 import { CONDITION_OPTIONS, DOCTOR, labelOf } from "@/wardvoice/data";
+import { OrganFigure, StethoscopeFigure } from "@/wardvoice/figures";
 import { AppScreen } from "@/wardvoice/Phone";
 import { useWard } from "@/wardvoice/store";
 import { Card, Chip, PillButton, conditionTone } from "@/wardvoice/ui";
@@ -18,12 +19,15 @@ export default function DoctorHome() {
 
 	return (
 		<AppScreen role="doctor" name={DOCTOR.name} subtitle={DOCTOR.ward}>
-			<h1 className="text-[34px] font-medium leading-[1.05] tracking-[-0.03em]">
-				Ready for
-				<br />
-				your round?
-			</h1>
-			<p className="mt-2 text-sm text-wv-muted">Keep your gloves on. Say the bed number to begin.</p>
+			<div className="relative">
+				<StethoscopeFigure className="pointer-events-none absolute -right-2 -top-3 w-[118px] motion-safe:animate-[wv-bob_4s_ease-in-out_infinite]" />
+				<h1 className="relative text-[34px] font-medium leading-[1.05] tracking-[-0.03em]">
+					Ready for
+					<br />
+					your round?
+				</h1>
+				<p className="relative mt-2 max-w-[62%] text-sm text-wv-muted">Keep your gloves on. Say the bed number to begin.</p>
+			</div>
 
 			<Card className="mt-5 p-3">
 				<div className="flex items-center gap-2">
@@ -62,10 +66,11 @@ export default function DoctorHome() {
 					return (
 						<Link key={p.id} href={`/doctor/round/${p.id}`} className="block">
 							<Card className="flex items-center gap-3 p-3 pr-3 active:scale-[0.99]">
-								<span className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white text-wv-blue shadow-wv-sm">
-									<span className="flex flex-col items-center leading-none">
-										<BedDouble className="h-4 w-4" />
-										<span className="mt-1 text-sm font-semibold text-wv-ink">{p.bed}</span>
+								<span className="relative grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white shadow-wv-sm">
+									<OrganFigure diagnosis={p.diagnosis} className="h-11 w-11" />
+									<span className="absolute -bottom-1.5 -right-1.5 flex h-6 min-w-6 items-center gap-0.5 rounded-full bg-wv-blue px-1.5 text-[11px] font-semibold text-white shadow-wv-blue">
+										<BedDouble className="h-3 w-3" />
+										{p.bed}
 									</span>
 								</span>
 								<div className="min-w-0 flex-1">

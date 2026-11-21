@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { DOCTOR, FAMILY_USER, patientById } from "@/wardvoice/data";
+import { HeartFigure } from "@/wardvoice/figures";
 import { Phone } from "@/wardvoice/Phone";
 import { type Role, signIn } from "@/wardvoice/session";
 import { IconButton, Logo, PillButton } from "@/wardvoice/ui";
@@ -39,11 +40,14 @@ function SignInForm() {
 				<span className="w-11" />
 			</div>
 
-			<h1 className="text-[34px] font-medium leading-[1.05] tracking-[-0.03em]">
-				Welcome
-				<br />
-				back
-			</h1>
+			<div className="relative">
+				<HeartFigure className="pointer-events-none absolute -right-1 -top-6 w-[112px] motion-safe:animate-[wv-bob_4s_ease-in-out_infinite]" />
+				<h1 className="relative text-[34px] font-medium leading-[1.05] tracking-[-0.03em]">
+					Welcome
+					<br />
+					back
+				</h1>
+			</div>
 			<p className="mt-2 text-sm text-wv-muted">Choose how you're signing in.</p>
 
 			<div className="mt-6 grid grid-cols-2 gap-2 rounded-full bg-wv-card p-1.5 shadow-wv-sm" role="tablist">

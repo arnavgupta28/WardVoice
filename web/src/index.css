@@ -126,6 +126,27 @@ body {
 	background-color: hsl(var(--background));
 }
 
+@keyframes wv-ecg {
+	from {
+		stroke-dashoffset: 690;
+	}
+
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes wv-bob {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+
+	50% {
+		transform: translateY(-5px);
+	}
+}
+
 @keyframes fade-up {
 	from {
 		opacity: 0;

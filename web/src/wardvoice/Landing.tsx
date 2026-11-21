@@ -1,34 +1,21 @@
 "use client";
 
+import { DnaHelix, EcgLine } from "./figures";
 import { Phone } from "./Phone";
 import { PillButton } from "./ui";
 
-/** Concentric "listening" rings + waveform — stands in for the 3D DNA hero. */
+/** Splash hero: 3D-style DNA helix with a live ECG trace and a voice chip. */
 export function HeroVisual() {
-	const bars = [18, 34, 52, 30, 64, 44, 72, 40, 58, 26, 46, 20];
 	return (
-		<div className="relative mx-auto aspect-square w-full max-w-[300px]" aria-hidden>
-			<div className="absolute inset-0 rounded-full bg-white/10" />
-			<div className="absolute inset-[13%] rounded-full bg-white/10" />
-			<div className="absolute inset-[27%] rounded-full bg-white/15" />
-			<div className="absolute inset-0 flex items-center justify-center gap-[5px]">
-				{bars.map((h, i) => (
-					<span
-						// biome-ignore lint/suspicious/noArrayIndexKey: static decorative bars
-						key={i}
-						className="w-[6px] animate-pulse rounded-full bg-white"
-						style={{ height: `${h * 0.55}%`, animationDelay: `${i * 90}ms`, opacity: 0.55 + (h / 72) * 0.45 }}
-					/>
-				))}
-			</div>
-			{[
-				{ top: "12%", left: "20%" },
-				{ top: "72%", left: "12%" },
-				{ top: "22%", left: "82%" },
-				{ top: "80%", left: "74%" },
-			].map((p) => (
-				<span key={p.top + p.left} className="absolute h-3.5 w-3.5 rounded-full bg-white shadow-[0_0_0_7px_rgba(255,255,255,0.18)]" style={p} />
-			))}
+		<div className="relative mx-auto w-full max-w-[300px]" aria-hidden>
+			<DnaHelix className="mx-auto h-[300px] w-auto motion-safe:animate-[wv-bob_5s_ease-in-out_infinite]" />
+			<EcgLine className="absolute inset-x-0 -bottom-6 h-10 text-white" />
+			<span className="absolute left-0 top-10 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-medium text-wv-blue shadow-wv-sm">
+				<span className="h-1.5 w-1.5 rounded-full bg-wv-green" /> "Bed 12, pulse 88…"
+			</span>
+			<span className="absolute bottom-20 right-0 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-medium text-wv-ink shadow-wv-sm">
+				<span className="grid h-4 w-4 place-items-center rounded-full bg-wv-red text-[10px] font-bold leading-none text-white">+</span> Family updated
+			</span>
 		</div>
 	);
 }

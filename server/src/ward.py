@@ -389,8 +389,13 @@ def sign_and_send(doctor_confirmed: bool, via: str = "voice") -> Dict[str, Any]:
     delivery = deliver_report(report)
     with _lock:
         report["delivery"] = delivery
+    say = _dispatch_text(report)
+    if report["status"] == "sent" and delivery.startswith("preview_only"):
+        say = f"Family update ready for {len(report['recipients'])} recipient(s); email preview saved in reports."
+    elif report["status"] == "sent" and delivery.startswith("failed"):
+        say = "Record signed, but the family email failed to send. It is saved in reports to resend."
     return {"signed": True, "report_id": report["id"], "family_update": report["status"], "delivery": delivery,
-            "say": _dispatch_text(report)}
+            "say": say}
 
 
 def _dispatch_text(report: Dict[str, Any]) -> str:

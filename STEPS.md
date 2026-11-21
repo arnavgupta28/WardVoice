@@ -21,6 +21,7 @@ Deadline: **12:30 IST** on Commudle (our target 12:00).
 | 14 | README = submission text (Agora, Murf, agent workflow) | ✅ | |
 | 15 | DEMO.md = WardVoice demo script | ✅ | |
 | 16 | Commit + push to public GitHub repo | ✅ | github.com/arnavgupta28/WardVoice |
+| 16b | Medical illustration fragments (DNA, heart, lungs, bone, cells, stethoscope, ECG) | ✅ | `web/src/wardvoice/figures.tsx` |
 | 17 | Demo video (backup) | 🔴 | **YOU** record after step 12 |
 | 18 | Submit on Commudle | 🔴 | **YOU**, by 12:30 |
 

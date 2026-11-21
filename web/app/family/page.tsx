@@ -3,6 +3,7 @@
 import { Activity, Droplets, HeartPulse, PhoneCall, Stethoscope, Thermometer } from "lucide-react";
 
 import { CONDITION_OPTIONS, FAMILY_USER, VITAL_META, formatVital, vitalInRange } from "@/wardvoice/data";
+import { CareBadge, EcgLine, OrganFigure, organFor } from "@/wardvoice/figures";
 import { AppScreen } from "@/wardvoice/Phone";
 import { useWard } from "@/wardvoice/store";
 import { Card, Chip, VitalRow, conditionTone } from "@/wardvoice/ui";
@@ -47,6 +48,23 @@ export default function FamilyHome() {
 							<PhoneCall className="h-4 w-4" />
 						</a>
 					</div>
+
+					<Card className="relative mt-4 overflow-hidden p-0">
+						<div className="relative grid h-[200px] place-items-center bg-gradient-to-b from-white to-wv-card">
+							<OrganFigure diagnosis={patient.diagnosis} className="h-[170px] w-auto motion-safe:animate-[wv-bob_5s_ease-in-out_infinite]" />
+							<span className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-wv-muted shadow-wv-sm">
+								Focus of care · {organFor(patient.diagnosis).label}
+							</span>
+							<EcgLine className="absolute inset-x-0 bottom-2 h-8 text-wv-blue" />
+						</div>
+						<div className="flex items-center gap-3 p-4">
+							<CareBadge className="h-11 w-11 shrink-0" />
+							<p className="text-sm leading-snug">
+								<span className="font-medium">{patient.diagnosis}.</span>{" "}
+								<span className="text-wv-muted">The care team updates you here after every ward round.</span>
+							</p>
+						</div>
+					</Card>
 
 					{latest.family_note && (
 						<Card className="mt-4 p-4">

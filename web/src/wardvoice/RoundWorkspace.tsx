@@ -22,6 +22,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { CONDITION_OPTIONS, CONSCIOUSNESS_OPTIONS, DIET_OPTIONS, MOBILITY_OPTIONS, VITAL_META, formatVital, vitalInRange } from "./data";
+import { OrganFigure } from "./figures";
 import type { FieldState, Patient, RoundRecord, SectionKey, TranscriptLine, Vitals } from "./types";
 import { Card, Chip, FieldStateBadge, IconButton, PillButton } from "./ui";
 
@@ -397,6 +398,9 @@ export function RoundWorkspace({
 					</p>
 					<h1 className="truncate text-2xl font-medium tracking-[-0.02em]">{patient.name}</h1>
 				</div>
+				<span className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-white shadow-wv-sm">
+					<OrganFigure diagnosis={patient.diagnosis} className="h-11 w-11" />
+				</span>
 			</div>
 
 			{record.verified ? (
