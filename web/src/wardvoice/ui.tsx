@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Check, Mic } from "lucide-react";
+import { ArrowUpRight, Check } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -26,14 +26,8 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
 export function Logo({ light = false }: { light?: boolean }) {
 	return (
 		<span className={cn("inline-flex items-center gap-2 font-semibold tracking-tight", light ? "text-white" : "text-wv-ink")}>
-			<span
-				className={cn(
-					"grid h-9 w-9 place-items-center rounded-full",
-					light ? "bg-white text-wv-blue" : "bg-wv-blue text-white shadow-wv-blue",
-				)}
-			>
-				<Mic className="h-4 w-4" aria-hidden />
-			</span>
+			{/* biome-ignore lint/performance/noImgElement: tiny static brand mark */}
+			<img src="/wardvoice-icon.svg" alt="" aria-hidden className={cn("h-9 w-9", !light && "drop-shadow-[0_6px_12px_rgba(11,95,255,0.35)]")} />
 			<span className="text-lg">
 				Ward<span className={light ? "text-white/70" : "text-wv-blue"}>Voice</span>
 			</span>

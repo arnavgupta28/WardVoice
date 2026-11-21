@@ -1,8 +1,18 @@
+<p align="center"><img src="docs/brand/wardvoice-logo.svg" width="420" alt="WardVoice"></p>
+
 # WardVoice
 
 **Doctors run ward rounds by voice, so they never touch a tablet with gloved hands. Every field is checked twice, and each family gets a plain-language daily update once the doctor signs off.**
 
 Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
+
+## Demo video
+
+▶️ **[Watch the demo on YouTube](https://youtu.be/REPLACE_WITH_VIDEO_ID)** (7 min): a real voice round recorded live (Agora ConvoAI + Murf Falcon), with a narrated intro and outro. The narration is also generated with Murf Falcon.
+
+| Doctor app | Voice round | Family app | Family email |
+|---|---|---|---|
+| <img src="docs/screenshots/03_doctor_home.png" width="200"> | <img src="docs/screenshots/04_round_p1.png" width="200"> | <img src="docs/screenshots/06_family_home.png" width="200"> | <img src="docs/screenshots/08_email.png" width="260"> |
 
 ## Problem
 
@@ -46,7 +56,41 @@ Safeguards built into the tools, not just the prompt:
 - The agent **refuses to start without `MURF_API_KEY`**, so it never silently falls back to another voice. The fallback exists only for local testing, behind `ALLOW_TTS_FALLBACK=1`.
 - Falcon's low latency matters here: per-section read-backs are spoken often, so a slow voice would stall the round.
 
+## Screens
+
+| Landing | Sign in | Doctor home | Voice round (signed) |
+|---|---|---|---|
+| <img src="docs/screenshots/01_landing.png" width="200"> | <img src="docs/screenshots/02_signin.png" width="200"> | <img src="docs/screenshots/03_doctor_home.png" width="200"> | <img src="docs/screenshots/04_round_p1.png" width="200"> |
+
+| Family reports (doctor) | Family home | Daily updates | Email |
+|---|---|---|---|
+| <img src="docs/screenshots/05_reports.png" width="200"> | <img src="docs/screenshots/06_family_home.png" width="200"> | <img src="docs/screenshots/07_family_updates.png" width="200"> | <img src="docs/screenshots/08_email.png" width="260"> |
+
+Design language: light neumorphic cards (`#E9EBEE` / `#F5F6F8`), primary blue `#0B5FFF`, **amber = captured**, **green = confirmed**, red only for critical or out-of-range values; 28px radius, pill buttons, Instrument Sans display type. Tokens live in `web/tailwind.config.js` (`colors.wv.*`).
+
+**Design catalogue:** [docs/DESIGN.md](docs/DESIGN.md) has the logo, colour and type, every illustration (DNA helix, heart, lungs, hip bone, blood cells, stethoscope, ECG, care badge) and where each one is used.
+
+| <img src="docs/design/figures/dna-helix.svg" width="90"> | <img src="docs/design/figures/heart.svg" width="90"> | <img src="docs/design/figures/lungs.svg" width="90"> | <img src="docs/design/figures/bone.svg" width="90"> | <img src="docs/design/figures/blood-cells.svg" width="90"> | <img src="docs/design/figures/stethoscope.svg" width="90"> | <img src="docs/design/figures/care-badge.svg" width="70"> |
+|---|---|---|---|---|---|---|
+
+## Tech stack
+
+| Layer | Technology | Role |
+|---|---|---|
+| Voice agent | **Agora Conversational AI Engine** | Turn-taking, interruptions, STT → LLM → TTS pipeline, MCP tool calls |
+| Real-time audio | **Agora RTC** (`agora-rtc-react`) | Doctor's mic and agent voice in the round screen |
+| Transcript / state | **Agora RTM** + `agora-agent-client-toolkit` | Live transcript, listening / thinking / speaking |
+| Speech-to-text | Deepgram nova-3 (Agora-managed) | |
+| LLM | OpenAI `gpt-4o-mini` (Agora-managed) | Plans and calls the tools |
+| Text-to-speech | **Murf Falcon** (`en-IN-priya`) | Every spoken read-back |
+| Tools | FastMCP (`server/src/mcp_server.py`) | 11 ward-round tools at `/mcp` |
+| Backend | FastAPI + `agora-agents` SDK | Tokens, agent lifecycle, ward record, REST, email |
+| Frontend | Next.js 16, React 19, Tailwind | Doctor and family phone apps |
+| Email | Resend or SMTP (preview-only fallback) | Family update after sign-off |
+
 ## Architecture
+
+<img src="docs/screenshots/architecture.png" width="800">
 
 ```
 Doctor phone app (Next.js)                    Family phone app (Next.js)
@@ -83,6 +127,8 @@ Checks:
 cd server && venv/bin/python -m pytest -q                       # unit tests
 venv/bin/python scripts/e2e_mcp_round.py https://<tunnel>       # full round over MCP via the public URL
 ```
+
+Verified on event day: 19/19 backend tests, `bun run verify:web` builds all 9 routes, a full scripted round over the public tunnel passes every adapt check (identity gate, implausible HR rejected, unknown bed, early sign-off blocked, edits blocked after lock, clinical note absent from the family email), and a live voice round was completed end to end (see the demo video).
 
 ## Future scope
 
