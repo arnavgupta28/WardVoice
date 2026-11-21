@@ -13,7 +13,9 @@ import ward
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-_endpoint = urlparse(os.getenv("MCP_ENDPOINT", ""))
+# Public host Agora calls. On Render MCP_ENDPOINT is unset and the service URL comes from RENDER_EXTERNAL_URL
+# (same fallback as agent.py); without it the DNS-rebinding guard rejects Agora with "421 Invalid Host header".
+_endpoint = urlparse(os.getenv("MCP_ENDPOINT") or os.getenv("RENDER_EXTERNAL_URL", ""))
 _public_host = _endpoint.netloc
 _public_origin = f"{_endpoint.scheme}://{_public_host}" if _endpoint.scheme and _public_host else ""
 
