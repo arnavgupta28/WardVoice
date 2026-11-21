@@ -6,6 +6,18 @@
 
 Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
 
+<p align="center">
+  <a href="https://wardvoice-web.onrender.com"><img src="https://img.shields.io/badge/Try_it_live-wardvoice--web.onrender.com-0B5FFF?style=for-the-badge" alt="Try WardVoice live"></a>
+  <a href="https://youtu.be/4of2eVV-wfs"><img src="https://img.shields.io/badge/Watch_demo-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the demo on YouTube"></a>
+</p>
+
+> **Live app:** https://wardvoice-web.onrender.com
+> - Doctor app: [/doctor?as=doctor](https://wardvoice-web.onrender.com/doctor?as=doctor). Open Bed 12 and tap **Start voice round** (allow the mic).
+> - Family app: [/family?as=family](https://wardvoice-web.onrender.com/family?as=family). Pick a language, then tap **Ask about today's update**.
+> - Or sign in at [/signin](https://wardvoice-web.onrender.com/signin) with the pre-filled demo accounts (Supabase Auth).
+>
+> It runs on Render's free tier, so the first visit after a quiet spell can take about a minute to wake up.
+
 ## Demo video
 
 <p align="center">
