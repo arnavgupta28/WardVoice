@@ -8,7 +8,11 @@ Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
 
 ## Demo video
 
-▶️ **[Watch the demo on YouTube](https://youtu.be/4of2eVV-wfs)** (9 min): a real voice round recorded live (Agora ConvoAI + Murf Falcon), with a narrated intro and outro. The narration is also generated with Murf Falcon.
+<p align="center">
+  <a href="https://youtu.be/4of2eVV-wfs"><img src="docs/screenshots/video_thumbnail.png" width="720" alt="Watch the WardVoice demo on YouTube"></a>
+</p>
+
+▶️ **[Watch the demo on YouTube](https://youtu.be/4of2eVV-wfs)** (9 min): a real voice round recorded live in one take (Agora ConvoAI + Murf Falcon), with a narrated intro and outro. The narration is also generated with Murf Falcon.
 
 | Doctor app | Voice round | Family app | Family email |
 |---|---|---|---|
