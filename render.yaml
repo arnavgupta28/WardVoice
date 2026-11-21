@@ -26,6 +26,11 @@ services:
       # MCP_ENDPOINT is derived from RENDER_EXTERNAL_URL (<this service>/mcp); set it only to override.
       - key: FAMILY_PORTAL_URL
         value: https://wardvoice-web.onrender.com/family?as=family
+      # Optional Supabase persistence (ward state survives restarts). Run supabase/schema.sql first.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
 
   - type: web
     name: wardvoice-web
@@ -41,3 +46,8 @@ services:
         value: https://wardvoice-api.onrender.com
       - key: NODE_VERSION
         value: "22"
+      # Optional Supabase Auth (real sign-in). NEXT_PUBLIC_* are baked in at build time: redeploy after setting.
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false

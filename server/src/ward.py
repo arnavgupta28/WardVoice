@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import functools
 import html
 import json
 import os
@@ -19,6 +20,8 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 import requests
+
+import persistence
 
 IST = ZoneInfo("Asia/Kolkata")
 _lock = threading.RLock()
@@ -128,7 +131,45 @@ def _seed_reports() -> List[Dict[str, Any]]:
 _state: Dict[str, Any] = {}
 
 
-def reset() -> None:
+def _persist() -> None:
+    """Hand a private copy of the ward state to the (optional) Supabase writer."""
+    if not persistence.enabled():
+        return
+    try:
+        with _lock:
+            state = copy.deepcopy(_state)
+        persistence.save(state)
+    except Exception as exc:  # noqa: BLE001 — never break a ward action
+        print(f"[PERSIST] could not queue save: {exc}", flush=True)
+
+
+def _persists(fn):
+    """Persist the ward state after a mutating action succeeds."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        out = fn(*args, **kwargs)
+        _persist()
+        return out
+    return wrapper
+
+
+def _restore() -> None:
+    """Replace the seed with the stored snapshot, if there is a valid one."""
+    stored = persistence.load()
+    if not stored:
+        return
+    try:
+        with _lock:
+            records = {**_state["records"], **{k: v for k, v in stored["records"].items() if k in _BY_ID}}
+            active = stored.get("active_patient_id")
+            _state.update(active_patient_id=active if active in _BY_ID else None, records=records,
+                          reports=list(stored["reports"]), seq=int(stored["seq"]))
+    except Exception as exc:  # noqa: BLE001 — a bad snapshot must not stop the server
+        print(f"[PERSIST] stored ward state unusable, using seed: {exc}", flush=True)
+        _seed()
+
+
+def _seed() -> None:
     with _lock:
         _state.clear()
         records = {p["id"]: _blank_record(p["id"]) for p in PATIENTS}
@@ -140,7 +181,14 @@ def reset() -> None:
         _state.update(active_patient_id=None, records=records, reports=_seed_reports(), seq=0)
 
 
-reset()
+@_persists
+def reset() -> None:
+    """Back to the demo seed, and persist it so the reset survives a restart."""
+    _seed()
+
+
+_seed()
+_restore()  # a stored snapshot (Supabase) wins over the seed
 
 
 # --------------------------------------------------------------------------- helpers
@@ -198,6 +246,7 @@ def patient_summary(p: Dict[str, Any]) -> Dict[str, Any]:
 
 # --------------------------------------------------------------------------- actions (voice + touch)
 
+@_persists
 def select_patient(bed: Optional[str] = None, patient_id: Optional[str] = None, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         p = _BY_ID.get(patient_id or "") or _BY_BED.get(str(bed or "").strip().lstrip("0") or "")
@@ -217,6 +266,7 @@ def select_patient(bed: Optional[str] = None, patient_id: Optional[str] = None, 
         }
 
 
+@_persists
 def confirm_identity(confirmed: bool, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -232,6 +282,7 @@ def confirm_identity(confirmed: bool, via: str = "voice") -> Dict[str, Any]:
         return {"verified": True, "patient": patient_summary(p)}
 
 
+@_persists
 def record_vitals(via: str = "voice", **values: Any) -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -253,6 +304,7 @@ def record_vitals(via: str = "voice", **values: Any) -> Dict[str, Any]:
                 "say": "Read the vitals back and ask to confirm." + (f" Flag: {', '.join(flags)} is outside normal range — double-check." if flags else "")}
 
 
+@_persists
 def set_status(condition: Optional[str] = None, consciousness: Optional[str] = None, diet: Optional[str] = None,
                mobility: Optional[str] = None, via: str = "voice") -> Dict[str, Any]:
     with _lock:
@@ -273,6 +325,7 @@ def set_status(condition: Optional[str] = None, consciousness: Optional[str] = N
         return {"status_fields": {k: r[k] for k in ("condition", "consciousness", "diet", "mobility")}, "section": "captured"}
 
 
+@_persists
 def add_order(kind: str, action: str, text: str, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -290,6 +343,7 @@ def add_order(kind: str, action: str, text: str, via: str = "voice") -> Dict[str
         return {"order": order, "orders": r["orders"], "section": "captured"}
 
 
+@_persists
 def remove_order(order_id: str, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -303,6 +357,7 @@ def remove_order(order_id: str, via: str = "voice") -> Dict[str, Any]:
         return {"orders": r["orders"]}
 
 
+@_persists
 def set_notes(clinical_note: Optional[str] = None, family_note: Optional[str] = None, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -317,6 +372,7 @@ def set_notes(clinical_note: Optional[str] = None, family_note: Optional[str] = 
         return {"clinical_note": r["clinical_note"], "family_note": r["family_note"], "section": "captured"}
 
 
+@_persists
 def confirm_section(section: str, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -333,6 +389,7 @@ def confirm_section(section: str, via: str = "voice") -> Dict[str, Any]:
         return {"section": section, "state": "confirmed", "still_to_confirm": remaining}
 
 
+@_persists
 def confirm_order(order_id: str, via: str = "touch") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -368,6 +425,7 @@ def read_back() -> Dict[str, Any]:
         return {"summary": " ".join(parts), "ready_to_sign": r["verified"] and not remaining, "still_to_confirm": remaining}
 
 
+@_persists
 def sign_and_send(doctor_confirmed: bool, via: str = "voice") -> Dict[str, Any]:
     with _lock:
         r = _record()
@@ -383,17 +441,18 @@ def sign_and_send(doctor_confirmed: bool, via: str = "voice") -> Dict[str, Any]:
         _audit(r, "Round signed and locked", via)
         report = _build_report(r)
         _state["reports"].insert(0, report)
-        _audit(r, _dispatch_text(report), "system")
         _state["active_patient_id"] = None
     # Deliver outside the lock — network I/O.
     delivery = deliver_report(report)
-    with _lock:
-        report["delivery"] = delivery
     say = _dispatch_text(report)
     if report["status"] == "sent" and delivery.startswith("preview_only"):
         say = f"Family update ready for {len(report['recipients'])} recipient(s); email preview saved in reports."
     elif report["status"] == "sent" and delivery.startswith("failed"):
         say = "Record signed, but the family email failed to send. It is saved in reports to resend."
+    with _lock:
+        report["delivery"] = delivery
+        # Audit what actually happened (sent / preview only / failed / held / no consent), after delivery.
+        _audit(r, say, "system")
     return {"signed": True, "report_id": report["id"], "family_update": report["status"], "delivery": delivery,
             "say": say}
 
@@ -541,6 +600,7 @@ def report_by_id(rid: str) -> Optional[Dict[str, Any]]:
         return next((copy.deepcopy(r) for r in _state["reports"] if r["id"] == rid), None)
 
 
+@_persists
 def apply_touch(pid: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Touch fallback: same rules as voice, recorded as via=touch."""
     with _lock:
