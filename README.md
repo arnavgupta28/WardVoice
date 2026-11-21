@@ -8,7 +8,7 @@ Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
 
 ## Demo video
 
-▶️ **[Watch the demo on YouTube](https://youtu.be/REPLACE_WITH_VIDEO_ID)** (7 min): a real voice round recorded live (Agora ConvoAI + Murf Falcon), with a narrated intro and outro. The narration is also generated with Murf Falcon.
+▶️ **[Watch the demo on YouTube](https://youtu.be/REPLACE_WITH_VIDEO_ID)** (9 min): a real voice round recorded live (Agora ConvoAI + Murf Falcon), with a narrated intro and outro. The narration is also generated with Murf Falcon.
 
 | Doctor app | Voice round | Family app | Family email |
 |---|---|---|---|
@@ -129,6 +129,17 @@ venv/bin/python scripts/e2e_mcp_round.py https://<tunnel>       # full round ove
 ```
 
 Verified on event day: 19/19 backend tests, `bun run verify:web` builds all 9 routes, a full scripted round over the public tunnel passes every adapt check (identity gate, implausible HR rejected, unknown bed, early sign-off blocked, edits blocked after lock, clinical note absent from the family email), and a live voice round was completed end to end (see the demo video).
+
+## Deploy on Render
+
+`render.yaml` is a Render Blueprint for two services: `wardvoice-api` (the Dockerfile: FastAPI + `/mcp`) and `wardvoice-web` (Next.js).
+
+1. Render dashboard → **New → Blueprint** → choose this repo.
+2. Enter the secrets it asks for: `AGORA_APP_ID`, `AGORA_APP_CERTIFICATE`, `MURF_API_KEY`.
+3. No tunnel is needed: the backend sets `MCP_ENDPOINT` to `RENDER_EXTERNAL_URL/mcp` automatically.
+4. If Render renames the API service (e.g. adds a suffix), set `AGENT_BACKEND_URL` on `wardvoice-web` to its URL and redeploy.
+
+Free instances sleep when idle, so open the API URL once about a minute before a demo.
 
 ## Future scope
 

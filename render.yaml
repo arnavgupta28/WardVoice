@@ -1,0 +1,43 @@
+# Render Blueprint: WardVoice backend (FastAPI + MCP, Docker) and web app (Next.js).
+# Deploy: Render dashboard → New → Blueprint → pick this repo, then fill in the secrets it asks for.
+services:
+  - type: web
+    name: wardvoice-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    healthCheckPath: /ward/state
+    envVars:
+      - key: AGORA_APP_ID
+        sync: false
+      - key: AGORA_APP_CERTIFICATE
+        sync: false
+      - key: MURF_API_KEY
+        sync: false
+      - key: MURF_VOICE_ID
+        value: en-IN-priya
+      - key: MURF_LOCALE
+        value: en-IN
+      - key: MURF_MODEL
+        value: FALCON
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      # MCP_ENDPOINT is derived from RENDER_EXTERNAL_URL (<this service>/mcp); set it only to override.
+      - key: FAMILY_PORTAL_URL
+        value: https://wardvoice-web.onrender.com/family?as=family
+
+  - type: web
+    name: wardvoice-web
+    runtime: node
+    rootDir: web
+    plan: free
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      # Public URL of wardvoice-api. If Render adds a suffix to the service name, update this and redeploy.
+      - key: AGENT_BACKEND_URL
+        value: https://wardvoice-api.onrender.com
+      - key: NODE_VERSION
+        value: "22"

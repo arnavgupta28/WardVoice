@@ -104,6 +104,9 @@ class Agent:
             "MURF_BASE_URL", "wss://global.api.murf.ai/v1/speech/stream-input"
         )
         self.mcp_endpoint = os.getenv("MCP_ENDPOINT")
+        # On Render the service's own public URL is provided, so /mcp is reachable without a tunnel.
+        if not self.mcp_endpoint and os.getenv("RENDER_EXTERNAL_URL"):
+            self.mcp_endpoint = os.environ["RENDER_EXTERNAL_URL"].rstrip("/") + "/mcp"
         if not self.mcp_endpoint:
             raise ValueError(
                 "MCP_ENDPOINT is required (public URL of your mcp/ server, "
