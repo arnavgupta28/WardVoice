@@ -1,225 +1,95 @@
 # WardVoice
 
-Hands-free voice ward rounds for doctors, with automatic plain-language updates for families. Built for Build with Agora (Bengaluru), Track 3. See [PLAN.md](./PLAN.md) for the design.
+**Doctors run ward rounds by voice, so they never touch a tablet with gloved hands. Every field is checked twice, and each family gets a plain-language daily update once the doctor signs off.**
 
-Built on the Agora Conversational AI MCP recipe; the original setup guide follows.
+Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
 
----
+## Problem
 
-# Agora Conversational AI — MCP Recipe (Python)
+On a ward round a doctor examines a patient, then has to record vitals, status, orders and notes. In isolation rooms, ICUs and post-op wards that means taking gloves off or touching a shared tablet, a known cross-contamination route, or writing it up later from memory. Meanwhile families phone the nurses' station all day asking "how is he today?", because nobody has time to tell them.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](https://www.python.org/)
-[![Bun](https://img.shields.io/badge/bun-latest-black)](https://bun.sh/)
+## Solution
 
-The **mcp** recipe in the Agora Conversational AI recipes family. An OpenAI
-Pipeline or Realtime model emits a tool call, Agora invokes the FastMCP server
-mounted at `/mcp` in the same backend process, returns the result, and the model
-speaks it.
+WardVoice is a phone app with two logins:
 
-Pipeline mode is **zero-key by default** because OpenAI, Deepgram STT, and
-MiniMax TTS are Agora-managed. Set `OPENAI_API_KEY` to use your own OpenAI
-credentials, and optionally override `OPENAI_BASE_URL` for a compatible
-endpoint. Realtime mode uses the separate `OPENAI_REALTIME_API_KEY`. The mock
-`get_time` tool needs no external credentials; replace it in
-`server/src/mcp_server.py`.
+- **Doctor app.** The doctor says "Bed 12". The agent reads back the name and MRN and waits for "correct" before anything is written. The doctor then dictates naturally ("pulse 88, BP 124 over 78, temp 37.2…"), and the record fills in live on screen: **amber** means captured, **green** means confirmed. Each section is read back and confirmed (layer 1). The whole round is read back before "sign and send" locks it (layer 2).
+- **Family app.** After sign-off, consented relatives get a plain-language update by email and in the app: condition, the doctor's note for the family, vitals and the plan. The internal clinical note is never sent.
 
-**Distinct from `recipe-agent-tool-calling`**: in that recipe the tools run
-inside the `llm/` endpoint. Here Agora orchestrates them via the MCP protocol —
-the selected OpenAI path issues a tool call, Agora invokes `MCP_ENDPOINT`, and
-the result flows back to the model.
+Safeguards built into the tools, not just the prompt:
+- Nothing is written before the identity is confirmed.
+- Vitals are range-checked: impossible values are rejected, abnormal ones are flagged for a re-check, and °F is converted to °C.
+- Condition, consciousness, diet and mobility only accept values from fixed lists. Orders are typed (kind and action). Only the two notes are free text.
+- **Deteriorating or critical:** the family email is held and the patient is added to the doctor's "call the family" list. Bad news is never delivered by email.
+- **No consent on file:** nothing is sent.
+- Every change is audit-logged with `via=voice` or `via=touch`. Every field also has a touch fallback that follows the same rules.
 
-## Prerequisites
+## Agentic workflow (Track 3: Initiate → Plan → Execute → Adapt → Confirm)
 
-- [Python 3.10+](https://www.python.org/)
-- [Bun](https://bun.sh/)
-- [Agora CLI](https://github.com/AgoraIO/cli) — makes generating an App ID + App Certificate easy
-- [ngrok](https://ngrok.com/) — the backend (including the `/mcp` endpoint) must be publicly reachable so Agora cloud can call it
+| Stage | What happens |
+|---|---|
+| Initiate | The doctor speaks over Agora RTC: "Bed 12." |
+| Plan | The LLM maps speech to the round's fixed sequence (identity → vitals → status → orders → notes → sign) and works out which section each utterance belongs to. |
+| Execute | MCP tool calls: `select_patient`, `confirm_identity`, `record_vitals`, `set_status`, `add_order`, `set_notes`, `confirm_section`, `read_back`, `sign_and_send`. A typical round makes 12 or more coordinated calls. |
+| Adapt | Tools refuse or flag: implausible vitals, writes before identity is confirmed, an unknown bed, signing with unconfirmed sections. They return `out_of_range` flags for abnormal values, and hold the email for critical patients. The agent asks the doctor to re-check or confirm instead of guessing. Touch edits revert a section to amber. |
+| Confirm and follow up | `sign_and_send` requires explicit doctor confirmation. It locks the record, writes the audit entry, builds the family report, and emails consented relatives (or holds it). |
 
-The same commands work on macOS, Linux, and Windows. On macOS/Linux, setup uses
-`python3`; on Windows, it uses the Python launcher (`py`) or `python`. WSL and
-virtualenv activation are not required.
+## Agora integration
 
-## Run It
+- **Agora Conversational AI Engine** runs the voice agent: Deepgram nova-3 STT → OpenAI LLM (Agora-managed) → **Murf Falcon TTS**, started from `server/src/agent.py` with the `agora-agents` SDK.
+- **Agora RTC** carries the doctor's mic and the agent's voice inside the round screen (`web/src/wardvoice/VoiceSessionLive.tsx`, `agora-rtc-react`).
+- **Agora RTM + `agora-agent-client-toolkit`** stream the live transcript and agent state (listening / thinking / speaking) into the doctor's screen.
+- **MCP tool calling:** the agent is started with `mcp_servers` pointing at our FastMCP server (`server/src/mcp_server.py`, mounted at `/mcp` in the same FastAPI process). Agora cloud calls it for every tool call.
 
-```bash
-# 1. Install Python venv + web deps
-bun run setup
+## Murf AI integration
 
-# 2. Add Agora credentials to server/.env.local
-agora login
-agora project use <your-project>
-agora project env write server/.env.local
-
-# 3. Expose the backend publicly — Agora cloud calls /mcp on this tunnel
-ngrok http 8000
-
-# 4. Set MCP_ENDPOINT in server/.env.local (use whatever domain ngrok prints)
-#    MCP_ENDPOINT=https://<your-tunnel>.ngrok-free.dev/mcp
-
-# 5. Run the backend and the web frontend
-bun run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) → **Start Conversation** →
-ask "what time is it?".
-
-### Working from a clone
-
-If you cloned this repo (rather than scaffolding via the Agora CLI), the steps
-above are complete as written: `bun run setup` creates the Python venv and
-installs web dependencies, then `bun run dev` brings up both services. You
-still need Agora credentials in `server/.env.local` and a public `MCP_ENDPOINT`
-tunnel before a conversation can connect.
-
-Services:
-
-- Frontend — http://localhost:3000
-- Backend + MCP server — http://localhost:8000 (including `/mcp`)
-- API docs — http://localhost:8000/docs
-
-## Deploy
-
-Deploy `web` (Next.js) and `server` (a single publicly reachable FastAPI
-process that also serves `/mcp`, so Agora cloud can reach `MCP_ENDPOINT`).
-Set `AGENT_BACKEND_URL` in the web deployment so the Next rewrites reach the
-backend.
-
-A single-process Docker image is published to
-`ghcr.io/AgoraIO-Conversational-AI/recipe-agent-mcp` on `v*` tags. It runs the
-agent backend and the FastMCP server in one process on port 8000. Expose port
-8000 publicly and point `MCP_ENDPOINT` at `<public-url>/mcp`.
-
-**Co-public caveat**: because the `/mcp` endpoint is served on the same port as
-the token endpoints, deploying this image publicly also exposes `/mcp`. For
-production use, add authentication to the MCP server or deploy behind a gateway
-that restricts `/mcp` access to Agora cloud IPs.
-
-## Environment variables
-
-Backend env file: [`server/.env.example`](server/.env.example).
-
-| Variable | Required | Default | Notes |
-| --- | :---: | :---: | --- |
-| `AGORA_APP_ID` | Yes | — | Agora Console → Project → App ID |
-| `AGORA_APP_CERTIFICATE` | Yes | — | Agora Console → Project → App Certificate |
-| `MCP_ENDPOINT` | Yes | — | **Public** URL of the `/mcp` endpoint (e.g. `https://<tunnel>/mcp`). Agora cloud calls it; cannot be `localhost`. |
-| `OPENAI_MODEL` | | `gpt-4o-mini` | Pipeline model |
-| `OPENAI_API_KEY` | | — | Optional Pipeline BYO API key; omit for Agora-managed mode |
-| `OPENAI_BASE_URL` | | OpenAI chat completions URL | Optional OpenAI-compatible Pipeline endpoint override |
-| `OPENAI_REALTIME_API_KEY` | Realtime only | — | OpenAI API key for Realtime mode |
-| `OPENAI_REALTIME_MODEL` | | `gpt-realtime` | OpenAI Realtime model |
-| `AGENT_GREETING` | | built-in | Optional opening line override |
-| `PORT` | | `8000` | Agent backend port |
-| `AGENT_BACKEND_URL` (web deploy) | Yes (deploy) | — | Required when deploying `web` |
-
-## Commands
-
-```bash
-bun run setup            # install web deps + create server/ venv
-bun run dev              # run backend (:8000, including /mcp) + web (:3000)
-
-bun run doctor           # prerequisite check (no creds needed)
-bun run doctor:local     # + .env.local + credentials + MCP_ENDPOINT checks
-
-bun run verify           # web-only gate (no Agora creds needed)
-bun run verify:local     # full local gate: backend compile + web build
-bun run clean            # remove venv and build artifacts
-```
-
-Tests run standalone (no Agora cloud needed): `pytest` in `server/`, plus
-`bun run verify` in `web/`. CI runs them on Linux/macOS/Windows × Python 3.10 &
-3.13.
+- Every word the agent speaks uses **Murf Falcon** streaming TTS (`MurfTTS`, `model=FALCON`, Indian English voice), configured in `server/src/agent.py`.
+- The agent **refuses to start without `MURF_API_KEY`**, so it never silently falls back to another voice. The fallback exists only for local testing, behind `ALLOW_TTS_FALLBACK=1`.
+- Falcon's low latency matters here: per-section read-backs are spoken often, so a slow voice would stall the round.
 
 ## Architecture
 
 ```
-Browser (localhost:3000)
-  │  fetch /api/*
-  ▼
-Next.js  ──rewrite──▶  Agent backend  (server/, localhost:8000)
-                          │  starts selected OpenAI path + typed mcp_servers
-                          │  also serves FastMCP at /mcp (same process)
-                          ▼
-                       Agora ConvoAI Cloud
-                          │  Pipeline: Deepgram → OpenAI LLM → MiniMax
-                          │  Realtime: OpenAI Realtime MLLM
-                          │  selected model emits tool call
-                          │  POST <MCP_ENDPOINT>   (streamable-http)
-                          ▼
-                       FastMCP server at /mcp  (same process, same port)
-                          │  returns tool result → selected model speaks it
-                          ▼
-                       Agora ConvoAI Cloud → user hears speech
-                                          → RTM transcript / metrics → web UI
+Doctor phone app (Next.js)                    Family phone app (Next.js)
+  │ RTC mic/voice · RTM transcript               │ GET /ward/state
+  ▼                                              ▼
+Agora ConvoAI cloud ── tool calls ──▶ FastAPI backend (:8000)
+  Deepgram → LLM → Murf Falcon        ├─ /mcp       FastMCP tools (ward round)
+                                      ├─ /ward/*    state, touch actions, email preview
+                                      ├─ /startAgent /stopAgent /get_config
+                                      └─ ward.py    validation, sign-off, audit, report, email
 ```
 
-The browser only ever calls Next `/api/*`, which rewrites to the agent backend.
-The agent backend owns Agora tokens and agent lifecycle. The **FastMCP server**
-is mounted in the same process on the same port — `ngrok http 8000` exposes
-both. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+The UI polls `/ward/state`, so tiles change colour the moment a tool call lands.
 
-## What You Get
+## Run it
 
-- A **Next.js** web client (:3000) that drives the RTC/RTM lifecycle and only
-  ever calls `/api/*`.
-- A **FastAPI** agent backend (:8000) that owns Agora token generation and the
-  agent session lifecycle.
-- The `/api/get_config` · `/api/startAgent` · `/api/stopAgent` contract between
-  the web client and the backend (Next rewrites, no Route Handlers).
-- Selectable managed OpenAI Pipeline and OpenAI Realtime MLLM paths with typed
-  `mcp_servers` configuration and tool execution enabled.
-- A **zero-key mock** MCP server mounted in-process; default Pipeline mode runs
-  with no LLM API key and only one port to expose.
+```bash
+bun run setup                                   # venv + web deps
+# server/.env.local: AGORA_APP_ID, AGORA_APP_CERTIFICATE, MURF_API_KEY
+cloudflared tunnel --url http://localhost:8000  # Agora cloud must reach /mcp
+# set MCP_ENDPOINT=https://<tunnel>.trycloudflare.com/mcp, then:
+bun run dev                                     # backend :8000 + web :3000
+```
 
-## How It Works
+- Doctor app: `/doctor/round/P1?as=doctor`. Tap **Start voice round** and say "Bed 12".
+- Family app: `/family?as=family`
+- Reset between demos: `curl -X POST localhost:8000/ward/reset`
+- Without a backend, the app runs on offline demo data and labels itself as such.
+- Optional real email: `RESEND_API_KEY` (or SMTP) plus `FAMILY_EMAIL_OVERRIDE=<your inbox>`.
 
-1. The browser calls `/api/get_config`, which Next rewrites to the backend; the
-   backend mints an Agora token from `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE`.
-2. The browser joins the RTC channel, then calls `/api/startAgent` with
-   `agentMode`; the backend attaches `mcp_servers` to managed OpenAI in Pipeline
-   mode or OpenAI Realtime MLLM in Realtime mode.
-3. Pipeline mode uses managed Deepgram STT and MiniMax TTS. Realtime mode handles
-   audio directly in the MLLM.
-4. When the model emits a tool call (e.g. `get_time`), Agora cloud issues a
-   streamable-HTTP request to `MCP_ENDPOINT`. The FastMCP server (mounted at
-   `/mcp` in the same process) runs the tool and returns the result.
-5. Agora feeds the tool result back to the model. Pipeline mode uses MiniMax TTS
-   for the reply; Realtime mode speaks it directly.
-6. `/api/stopAgent` ends the session.
+Checks:
 
-### Replacing the mock
+```bash
+cd server && venv/bin/python -m pytest -q                       # unit tests
+venv/bin/python scripts/e2e_mcp_round.py https://<tunnel>       # full round over MCP via the public URL
+```
 
-Add tools in [`server/src/mcp_server.py`](server/src/mcp_server.py). Each
-function decorated with `@mcp.tool()` is automatically registered. The mock
-`get_time` tool needs no external credentials — replace or extend it with your
-own logic.
+## Future scope
 
-To verify tool arguments in either mode, ask "What time is it in 12-hour
-format?" and then "Tell me in 24-hour format." The backend logs the selected
-`time_format` and the returned server time.
+- EHR write-back (FHIR `Observation`, `MedicationRequest`) instead of the in-memory ward.
+- Murf voice notes for families in Hindi and Kannada.
+- A family voice line that answers only from the signed summary.
+- Auto-generated nursing shift handover.
+- Hospital SSO and per-ward consent management.
 
-## Repo Map
-
-- `web/` — Next.js frontend (:3000); RTC/RTM lifecycle and UI.
-- `server/` — FastAPI agent backend (:8000); Agora tokens + agent lifecycle,
-  selectable OpenAI paths with `mcp_servers`, FastMCP server mounted at `/mcp`.
-- `ARCHITECTURE.md` — system shape and component boundaries.
-- `AGENTS.md` — guide for coding agents working in this repo.
-
-## Troubleshooting
-
-| Problem | Fix |
-| --- | --- |
-| Agent starts but never responds to "what time is it?" | `MCP_ENDPOINT` is not public or the `/mcp` path is wrong. Use your ngrok URL. |
-| `doctor:local` warns about localhost | Replace the local URL with your public tunnel URL. |
-| Local calls fail under a global proxy | Configure the proxy to send `127.0.0.1` and `localhost` DIRECT. |
-
-## More Docs
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [AGENTS.md](./AGENTS.md)
-
-## License
-
-Released under the [MIT License](./LICENSE).
+Built on Agora's `recipe-agent-mcp` starter (MIT). See [PLAN.md](./PLAN.md) and [DEMO.md](./DEMO.md).

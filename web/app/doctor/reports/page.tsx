@@ -3,71 +3,74 @@
 import { MailCheck, PhoneCall, ShieldOff } from "lucide-react";
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
-import { CONDITION_OPTIONS, REPORTS, labelOf, patientById } from "@/wardvoice/data";
-import { DoctorShell } from "@/wardvoice/DoctorShell";
+import { CONDITION_OPTIONS, DOCTOR, labelOf } from "@/wardvoice/data";
 import { FamilyEmail } from "@/wardvoice/FamilyEmail";
+import { AppScreen, Sheet } from "@/wardvoice/Phone";
+import { useWard } from "@/wardvoice/store";
 import type { ReportStatus } from "@/wardvoice/types";
 import { Card, Chip, conditionTone } from "@/wardvoice/ui";
 
 const STATUS: Record<ReportStatus, { label: string; tone: "green" | "amber" | "neutral"; icon: React.ReactNode }> = {
-	sent: { label: "Emailed", tone: "green", icon: <MailCheck className="h-4 w-4" /> },
-	held_call_family: { label: "Held · call family", tone: "amber", icon: <PhoneCall className="h-4 w-4" /> },
-	no_consent: { label: "No consent on file", tone: "neutral", icon: <ShieldOff className="h-4 w-4" /> },
+	sent: { label: "Emailed", tone: "green", icon: <MailCheck className="h-5 w-5" /> },
+	held_call_family: { label: "Call family", tone: "amber", icon: <PhoneCall className="h-5 w-5" /> },
+	no_consent: { label: "No consent", tone: "neutral", icon: <ShieldOff className="h-5 w-5" /> },
 };
 
 export default function ReportsPage() {
-	const [selected, setSelected] = useState(REPORTS.find((r) => r.status === "sent")?.id ?? REPORTS[0].id);
-	const report = REPORTS.find((r) => r.id === selected) ?? REPORTS[0];
-	const patient = patientById(report.patient_id);
+	const { state } = useWard(2000);
+	const [open, setOpen] = useState<string | null>(null);
+	const reports = state?.reports ?? [];
+	const report = reports.find((r) => r.id === open);
+	const patientOf = (pid: string) => state?.patients.find((p) => p.id === pid);
+
+	const overlay = report ? (
+		<Sheet label="Report" onClose={() => setOpen(null)}>
+			{report.status === "sent" ? (
+				<FamilyEmail report={report} recipientName={patientOf(report.patient_id)?.family.find((f) => f.consent)?.name.split(" ")[0]} />
+			) : (
+				<Card className="p-5">
+					<p className="text-lg font-medium">{STATUS[report.status].label}</p>
+					<p className="mt-2 text-sm text-wv-muted">
+						{report.status === "no_consent"
+							? "The family hasn't consented to email updates, so this report stays internal."
+							: "The condition needs a personal conversation. The email was withheld and the family was added to your call list."}
+					</p>
+				</Card>
+			)}
+		</Sheet>
+	) : null;
 
 	return (
-		<DoctorShell>
-			<div className="mb-6">
-				<h1 className="text-[40px] font-medium leading-tight tracking-[-0.03em]">Family reports</h1>
-				<p className="text-wv-muted">Generated automatically after each sign-off. Only consented family members receive them.</p>
-			</div>
-			<div className="grid gap-6 lg:grid-cols-[1fr_480px]">
-				<div className="space-y-3">
-					{REPORTS.map((r) => {
-						const p = patientById(r.patient_id);
-						const st = STATUS[r.status];
-						return (
-							<button key={r.id} type="button" onClick={() => setSelected(r.id)} className="block w-full text-left">
-								<Card className={cn("flex flex-wrap items-center gap-4 p-4 transition", r.id === selected && "ring-2 ring-wv-blue")}>
-									<span className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-wv-blue shadow-wv-sm">{st.icon}</span>
-									<div className="mr-auto min-w-0">
-										<p className="font-medium">
-											{p?.name} <span className="text-sm font-normal text-wv-muted">· Bed {p?.bed}</span>
-										</p>
-										<p className="text-xs text-wv-muted">
-											{new Date(r.date).toDateString()} · signed {r.signed_at} by {r.signed_by}
-										</p>
+		<AppScreen role="doctor" name={DOCTOR.name} subtitle={DOCTOR.ward} overlay={overlay}>
+			<h1 className="text-[34px] font-medium leading-[1.05] tracking-[-0.03em]">Family reports</h1>
+			<p className="mt-2 text-sm text-wv-muted">Sent automatically after sign-off, only to consented family.</p>
+			<div className="mt-5 space-y-3">
+				{reports.map((r) => {
+					const p = patientOf(r.patient_id);
+					const st = STATUS[r.status];
+					return (
+						<button key={r.id} type="button" onClick={() => setOpen(r.id)} className="block w-full text-left">
+							<Card className="flex items-center gap-3 p-3">
+								<span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] bg-white text-wv-blue shadow-wv-sm">{st.icon}</span>
+								<div className="min-w-0 flex-1">
+									<p className="truncate font-medium">
+										{p?.name} <span className="text-xs font-normal text-wv-muted">· Bed {p?.bed}</span>
+									</p>
+									<p className="text-xs text-wv-muted">
+										{new Date(r.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })} · signed {r.signed_at}
+									</p>
+									<div className="mt-1.5 flex gap-1.5">
+										<Chip tone={conditionTone(r.condition)}>{labelOf(CONDITION_OPTIONS, r.condition)}</Chip>
+										<Chip tone={st.tone} dot>
+											{st.label}
+										</Chip>
 									</div>
-									<Chip tone={conditionTone(r.condition)} dot>
-										{labelOf(CONDITION_OPTIONS, r.condition)}
-									</Chip>
-									<Chip tone={st.tone}>{st.label}</Chip>
-								</Card>
-							</button>
-						);
-					})}
-				</div>
-				<div className="lg:sticky lg:top-6 lg:self-start">
-					{report.status === "sent" ? (
-						<FamilyEmail report={report} recipientName={patient?.family.find((f) => f.consent)?.name.split(" ")[0]} />
-					) : (
-						<Card className="p-6">
-							<p className="text-lg font-medium">{STATUS[report.status].label}</p>
-							<p className="mt-2 text-sm text-wv-muted">
-								{report.status === "no_consent"
-									? `${patient?.name}'s family hasn't consented to email updates, so this report stays internal. Ask the family at the next visit.`
-									: "Condition needs a personal conversation. The email was withheld and the family was added to your call list."}
-							</p>
-						</Card>
-					)}
-				</div>
+								</div>
+							</Card>
+						</button>
+					);
+				})}
 			</div>
-		</DoctorShell>
+		</AppScreen>
 	);
 }

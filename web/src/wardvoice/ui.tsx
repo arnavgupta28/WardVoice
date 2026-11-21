@@ -108,7 +108,7 @@ export function Chip({
 	}[tone];
 	const dots = { neutral: "bg-wv-muted", blue: "bg-wv-blue", green: "bg-wv-green", amber: "bg-wv-amber", red: "bg-wv-red" }[tone];
 	return (
-		<span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium", tones, className)}>
+		<span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium", tones, className)}>
 			{dot && <span className={cn("h-1.5 w-1.5 rounded-full", dots)} aria-hidden />}
 			{children}
 		</span>

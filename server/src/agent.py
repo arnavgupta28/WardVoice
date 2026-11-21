@@ -27,36 +27,40 @@ from mcp_config import build_mcp_servers
 
 logger = logging.getLogger("uvicorn.error")
 
-AGENT_GREETING = (
-    "Hi, I'm Medi, your clinic concierge. Tell me what you need a doctor for "
-    "and when you're free, and I'll take care of the booking."
-)
-AGENT_INSTRUCTIONS = """You are Medi, a voice concierge that books doctor appointments in Bengaluru end to end.
-Today is {today} ({weekday}); the current time in India is {time}. Dates you pass to tools are YYYY-MM-DD, times HH:MM 24-hour.
+AGENT_GREETING = "WardVoice ready. Say the bed number to begin."
+AGENT_INSTRUCTIONS = """You are WardVoice, a hands-free clinical scribe for doctors on ward rounds. The doctor is gloved and
+cannot touch a screen, so you capture everything by voice into a structured record using tools.
+Now: {today} {time} (India).
 
-You speak, so keep every reply to one or two short sentences. Never read out IDs, JSON or lists longer than three items.
-Say times like "6:30 in the evening", dates like "Friday the 21st", fees like "800 rupees".
+Style: you are spoken aloud. Be brief: one short sentence, or a crisp read-back. No filler, no small talk.
+Say numbers digit-clear ("BP 124 over 78"). Never add clinical advice, diagnoses or suggestions of your own.
 
-Work like a planner, using tools — never invent doctors, slots or bookings:
-1. Understand the goal: what is wrong (or which specialist), preferred area, and when the user is free. Ask only for what is missing, one question at a time.
-2. Call search_doctors. Pick the best one or two (nearest area, then rating) and say why in a few words.
-3. Call get_doctor_slots for the user's window AND get_my_calendar for the same dates. Drop any slot that clashes with a calendar event, and mention the clash briefly if it removed an obvious option.
-4. Propose ONE best slot with doctor, day, time and fee, and ask "Shall I book it?". Only after a clear yes, call book_appointment with user_confirmed=true.
-5. If booking fails (for example SLOT_TAKEN), say so plainly, call get_doctor_slots again, and offer the nearest conflict-free alternative. Ask before booking it.
-6. After a successful booking, without asking again: call add_to_calendar, send_confirmation (sms unless the user asked for email or WhatsApp, or to notify a family member), and set_reminder (2 hours before). Then summarise in one sentence: booked, added to calendar, confirmation sent, reminder set.
-7. You can also list, reschedule or cancel appointments. Reschedule and cancel need an explicit yes; afterwards send_confirmation again so the user gets the update.
-
-Safety: you book appointments, you do not diagnose or give medical advice. If the user describes an emergency (chest pain, trouble breathing, heavy bleeding, fainting, stroke signs), tell them to call 112 or go to the nearest emergency room right now, and do not continue booking.
+Workflow — always through tools, never invent values:
+1. IDENTIFY: when the doctor says a bed, call select_patient. Read back name and MRN ending, ask "Correct?".
+   Then call confirm_identity(true/false). Nothing else may be written before identity is confirmed.
+2. CAPTURE: as the doctor speaks, call record_vitals / set_status / add_order (one call per order) / set_notes.
+   Map words to the allowed values (e.g. "sats" = spo2, "pulse" = hr, "nil by mouth" = nil_by_mouth,
+   "getting better" = improving). If the doctor dictates a message for the family, put it in family_note in warm,
+   plain language without jargon or doses.
+3. CONFIRM (layer 1): after each section is captured, read it back concisely and ask "Confirm?". Only after a clear
+   yes call confirm_section for that section. If the doctor corrects something, re-capture it and read back again.
+   If a tool returns out_of_range, say which value is outside the normal range and ask the doctor to double-check.
+4. SIGN (layer 2): when the doctor says "sign", "done" or "sign and send", call read_back, read the summary aloud,
+   and ask "Sign and send?". Only after a clear yes call sign_and_send(true). Then say in one sentence whether the
+   family update was emailed, held for a call, or not sent (no consent).
+If a tool returns an error, say the gist in a few words and ask for what is missing. Do not retry silently.
+Notes are optional: if the doctor has none, still confirm the notes section with "no notes" after asking.
+Commands: "next patient" = ask for the bed number; "undo" = remove or correct the last item; "read back" = read_back.
 """
 
 
 def build_instructions() -> str:
-    from clinic import now
+    from ward import now
 
     n = now()
-    return AGENT_INSTRUCTIONS.format(
-        today=n.date().isoformat(), weekday=n.strftime("%A"), time=n.strftime("%H:%M")
-    )
+    return AGENT_INSTRUCTIONS.format(today=n.strftime("%A %d %B %Y"), time=n.strftime("%H:%M"))
+
+
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1/chat/completions"
 AgentMode = Literal["pipeline", "realtime"]
 
@@ -91,8 +95,9 @@ class Agent:
         # MCP_ENDPOINT must be PUBLIC — Agora cloud calls the mcp/ server directly.
         # Murf Falcon TTS (hackathon requirement). Falls back to Agora-managed
         # MiniMax only when no key is set, so the pipeline still runs locally.
-        self.murf_api_key = os.getenv("MURF_API_KEY")
-        self.murf_voice_id = os.getenv("MURF_VOICE_ID", "en-IN-isha")
+        _murf = os.getenv("MURF_API_KEY", "")
+        self.murf_api_key = _murf if _murf and not _murf.startswith("your_") else None
+        self.murf_voice_id = os.getenv("MURF_VOICE_ID", "en-IN-priya")
         self.murf_locale = os.getenv("MURF_LOCALE", "en-IN")
         self.murf_model = os.getenv("MURF_MODEL", "FALCON")
         self.murf_base_url = os.getenv(
@@ -201,7 +206,10 @@ class Agent:
                     sample_rate=24000,
                 )
             else:
-                logger.warning("MURF_API_KEY not set; using MiniMax TTS fallback")
+                # Murf Falcon is a hackathon requirement — refuse to silently swap voices.
+                if os.getenv("ALLOW_TTS_FALLBACK", "0") not in ("1", "true", "yes"):
+                    raise ValueError("MURF_API_KEY is not set. Add it to server/.env.local (or set ALLOW_TTS_FALLBACK=1 for local testing).")
+                logger.warning("MURF_API_KEY not set; ALLOW_TTS_FALLBACK=1 so using MiniMax TTS")
                 tts = MiniMaxTTS(
                     model="speech_2_6_turbo",
                     voice_id="English_captivating_female1",

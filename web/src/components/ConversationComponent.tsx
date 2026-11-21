@@ -8,7 +8,6 @@ import {
 	getConversationIssueSeverity,
 } from "@/components/ConversationErrorCard";
 import { MicrophoneSelector } from "@/components/MicrophoneSelector";
-import { AgentActivityPanel } from "@/components/AgentActivityPanel";
 import { QuickstartConversationLayout } from "@/components/QuickstartConversationLayout";
 import {
 	type QuickstartAgentMetric,
@@ -438,7 +437,6 @@ export default function ConversationComponent({
 
 	return (
 		<QuickstartConversationLayout
-			activityPanel={<AgentActivityPanel />}
 			statusPanel={
 				<ConnectionStatusPanel
 					connectionState={connectionState}

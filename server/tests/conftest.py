@@ -11,6 +11,7 @@ FAKE_ENV = {
     "AGORA_APP_ID": "test_app_id",
     "AGORA_APP_CERTIFICATE": "test_app_certificate",
     "MCP_ENDPOINT": "https://fake.example.com/mcp",
+    "MURF_API_KEY": "test_murf_key",
 }
 
 

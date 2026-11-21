@@ -9,7 +9,7 @@ import os
 from typing import Any, Dict, Literal, Optional
 from urllib.parse import urlparse
 
-import clinic
+import ward
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -18,7 +18,7 @@ _public_host = _endpoint.netloc
 _public_origin = f"{_endpoint.scheme}://{_public_host}" if _endpoint.scheme and _public_host else ""
 
 mcp = FastMCP(
-    "clinic-appointment-agent",
+    "wardvoice",
     transport_security=TransportSecuritySettings(
         allowed_hosts=[
             "127.0.0.1:*",
@@ -52,96 +52,87 @@ def get_time(time_format: Literal["12-hour", "24-hour"] = "24-hour") -> str:
 
 
 # ----------------------------------------------------------------------------
-# Clinic appointment agent tools (Track 3). Logic lives in clinic.py; these
-# wrappers only turn bad input into an error the model can recover from.
+# WardVoice tools (Track 3). Logic lives in ward.py and is shared with the touch
+# fallback (REST), so voice and touch obey identical rules. Every write lands in
+# a "captured" state; nothing counts until confirm_section and sign_and_send.
 # ----------------------------------------------------------------------------
 
 def _safe(tool: str, fn, **kwargs) -> Dict[str, Any]:
     try:
         return fn(**kwargs)
-    except (ValueError, KeyError) as exc:
-        msg = f"Invalid input: {exc}. Dates must be YYYY-MM-DD and times HH:MM (24-hour)."
-        clinic.log(tool, kwargs, "error", msg)
-        return {"error": msg}
+    except ward.WardError as exc:
+        print(f"[MCP TOOL] {tool} refused: {exc}", flush=True)
+        return {"error": str(exc)}
+    except (ValueError, TypeError) as exc:
+        return {"error": f"Invalid input: {exc}"}
 
 
 @mcp.tool()
-def get_today() -> Dict[str, Any]:
-    """Return today's date, weekday and current time in India (IST). Use it to resolve 'tomorrow', 'this week', etc."""
-    n = clinic.now()
-    return {"date": n.date().isoformat(), "weekday": n.strftime("%A"), "time": n.strftime("%H:%M")}
+def select_patient(bed: str) -> Dict[str, Any]:
+    """Select the patient by bed number (e.g. "12"). Returns name and MRN to read back for identity confirmation."""
+    return _safe("select_patient", ward.select_patient, bed=bed)
 
 
 @mcp.tool()
-def search_doctors(specialty: str, area: Optional[str] = None, language: Optional[str] = None) -> Dict[str, Any]:
-    """Find doctors in Bengaluru by specialty (e.g. dermatologist, general physician, endocrinologist,
-    dentist, orthopedic). Optional area (e.g. Whitefield) ranks nearby clinics first; optional language filters."""
-    return _safe("search_doctors", clinic.search_doctors, specialty=specialty, area=area, language=language)
+def confirm_identity(confirmed: bool) -> Dict[str, Any]:
+    """Call after reading back name + MRN: confirmed=true if the doctor said yes/correct, false otherwise."""
+    return _safe("confirm_identity", ward.confirm_identity, confirmed=confirmed)
 
 
 @mcp.tool()
-def get_doctor_slots(doctor_id: str, date_from: str, date_to: Optional[str] = None,
-                     earliest_time: Optional[str] = None, latest_time: Optional[str] = None) -> Dict[str, Any]:
-    """List a doctor's open 30-minute slots between date_from and date_to (YYYY-MM-DD, inclusive),
-    optionally only between earliest_time and latest_time (HH:MM, 24-hour)."""
-    return _safe("get_doctor_slots", clinic.get_doctor_slots, doctor_id=doctor_id, date_from=date_from,
-                 date_to=date_to, earliest_time=earliest_time, latest_time=latest_time)
+def record_vitals(hr: Optional[float] = None, bp_sys: Optional[float] = None, bp_dia: Optional[float] = None,
+                  temp_c: Optional[float] = None, spo2: Optional[float] = None, rr: Optional[float] = None,
+                  pain: Optional[float] = None) -> Dict[str, Any]:
+    """Record any vitals the doctor spoke: heart rate (hr), blood pressure (bp_sys/bp_dia), temperature in °C
+    (Fahrenheit is auto-converted), oxygen saturation (spo2), respiratory rate (rr), pain 0-10. Only pass what was said."""
+    return _safe("record_vitals", ward.record_vitals, hr=hr, bp_sys=bp_sys, bp_dia=bp_dia, temp_c=temp_c,
+                 spo2=spo2, rr=rr, pain=pain)
 
 
 @mcp.tool()
-def get_my_calendar(date_from: str, date_to: Optional[str] = None) -> Dict[str, Any]:
-    """Return the user's existing calendar events between date_from and date_to (YYYY-MM-DD).
-    Always check this before proposing a slot so you never suggest a clash."""
-    return _safe("get_my_calendar", clinic.get_my_calendar, date_from=date_from, date_to=date_to)
+def set_status(condition: Optional[Literal["improving", "stable", "deteriorating", "critical"]] = None,
+               consciousness: Optional[Literal["alert", "drowsy", "responds_to_voice", "unresponsive"]] = None,
+               diet: Optional[Literal["nil_by_mouth", "liquids", "soft", "normal", "diabetic"]] = None,
+               mobility: Optional[Literal["bed_rest", "assisted", "independent"]] = None) -> Dict[str, Any]:
+    """Set overall condition, consciousness, diet and/or mobility. Map the doctor's words to the closest allowed value."""
+    return _safe("set_status", ward.set_status, condition=condition, consciousness=consciousness, diet=diet, mobility=mobility)
 
 
 @mcp.tool()
-def book_appointment(doctor_id: str, date: str, time: str, patient_name: str, reason: str,
-                     user_confirmed: bool = False) -> Dict[str, Any]:
-    """Book an appointment. Only set user_confirmed=true after the user has said yes to the exact
-    doctor, date, time and fee. May return SLOT_TAKEN — then offer the nearest alternatives."""
-    return _safe("book_appointment", clinic.book_appointment, doctor_id=doctor_id, date=date, time=time,
-                 patient_name=patient_name, reason=reason, user_confirmed=user_confirmed)
+def add_order(kind: Literal["medication", "test", "consult", "discharge"],
+              action: Literal["start", "stop", "change", "order", "plan"], text: str) -> Dict[str, Any]:
+    """Add one clinical decision. text is concise and complete, e.g. "Paracetamol 1 g IV 6-hourly" or
+    "Repeat chest X-ray tomorrow morning". Call once per order."""
+    return _safe("add_order", ward.add_order, kind=kind, action=action, text=text)
 
 
 @mcp.tool()
-def add_to_calendar(appointment_id: str) -> Dict[str, Any]:
-    """Add a booked appointment to the user's calendar."""
-    return _safe("add_to_calendar", clinic.add_to_calendar, appointment_id=appointment_id)
+def remove_order(order_id: str) -> Dict[str, Any]:
+    """Remove a captured order by id (e.g. "O2") when the doctor cancels it."""
+    return _safe("remove_order", ward.remove_order, order_id=order_id)
 
 
 @mcp.tool()
-def send_confirmation(appointment_id: str, channel: Literal["sms", "email", "whatsapp"] = "sms",
-                      recipient: Optional[str] = None) -> Dict[str, Any]:
-    """Send the appointment's current status (confirmed / rescheduled / cancelled) to the user,
-    or to a family member if recipient is given."""
-    return _safe("send_confirmation", clinic.send_confirmation, appointment_id=appointment_id,
-                 channel=channel, recipient=recipient)
+def set_notes(clinical_note: Optional[str] = None, family_note: Optional[str] = None) -> Dict[str, Any]:
+    """Free-text notes. clinical_note is internal (clinical shorthand is fine). family_note is sent to the family:
+    write it in warm, plain language with no jargon, numbers or drug doses."""
+    return _safe("set_notes", ward.set_notes, clinical_note=clinical_note, family_note=family_note)
 
 
 @mcp.tool()
-def set_reminder(appointment_id: str, minutes_before: int = 120) -> Dict[str, Any]:
-    """Schedule a reminder before the appointment (default 2 hours before)."""
-    return _safe("set_reminder", clinic.set_reminder, appointment_id=appointment_id, minutes_before=minutes_before)
+def confirm_section(section: Literal["vitals", "status", "orders", "notes"]) -> Dict[str, Any]:
+    """Mark a section confirmed ONLY after you read it back and the doctor said yes."""
+    return _safe("confirm_section", ward.confirm_section, section=section)
 
 
 @mcp.tool()
-def list_my_appointments() -> Dict[str, Any]:
-    """List the user's active (not cancelled) appointments."""
-    return _safe("list_my_appointments", clinic.list_my_appointments)
+def read_back() -> Dict[str, Any]:
+    """Summary of the whole round to read aloud before final sign-off; also lists sections still to confirm."""
+    return _safe("read_back", ward.read_back)
 
 
 @mcp.tool()
-def reschedule_appointment(appointment_id: str, new_date: str, new_time: str,
-                           user_confirmed: bool = False) -> Dict[str, Any]:
-    """Move an appointment to a new open slot (check get_doctor_slots and get_my_calendar first).
-    Only set user_confirmed=true after the user agrees to the new slot."""
-    return _safe("reschedule_appointment", clinic.reschedule_appointment, appointment_id=appointment_id,
-                 new_date=new_date, new_time=new_time, user_confirmed=user_confirmed)
-
-
-@mcp.tool()
-def cancel_appointment(appointment_id: str, user_confirmed: bool = False) -> Dict[str, Any]:
-    """Cancel an appointment and remove its calendar entry and reminders. Requires explicit user confirmation."""
-    return _safe("cancel_appointment", clinic.cancel_appointment, appointment_id=appointment_id,
-                 user_confirmed=user_confirmed)
+def sign_and_send(doctor_confirmed: bool) -> Dict[str, Any]:
+    """Final sign-off. Only after read_back and the doctor saying "sign and send". Locks the record and sends the
+    family update (or holds it for a call if the condition is deteriorating/critical)."""
+    return _safe("sign_and_send", ward.sign_and_send, doctor_confirmed=doctor_confirmed)

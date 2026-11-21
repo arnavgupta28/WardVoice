@@ -18,7 +18,7 @@ import {
 	Trash2,
 	Wind,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { CONDITION_OPTIONS, CONSCIOUSNESS_OPTIONS, DIET_OPTIONS, MOBILITY_OPTIONS, VITAL_META, formatVital, vitalInRange } from "./data";
@@ -216,6 +216,52 @@ function VitalTile({
 	);
 }
 
+
+/** Free-text note with a local draft; saves on blur so live polling never clobbers typing. */
+function NoteField({
+	label,
+	hint,
+	value,
+	locked,
+	family,
+	onSave,
+}: {
+	label: string;
+	hint: string;
+	value: string;
+	locked: boolean;
+	family?: boolean;
+	onSave: (v: string) => void;
+}) {
+	const [draft, setDraft] = useState(value);
+	const [focused, setFocused] = useState(false);
+	useEffect(() => {
+		if (!focused) setDraft(value);
+	}, [value, focused]);
+	return (
+		<label className="mt-3 block first:mt-0">
+			<span className="mb-1 flex justify-between text-[11px] font-medium text-wv-muted">
+				{label} <span className={cn("uppercase", family && "text-wv-blue")}>{hint}</span>
+			</span>
+			<textarea
+				value={draft}
+				disabled={locked}
+				onFocus={() => setFocused(true)}
+				onChange={(e) => setDraft(e.target.value)}
+				onBlur={() => {
+					setFocused(false);
+					if (draft !== value) onSave(draft);
+				}}
+				rows={3}
+				className={cn(
+					"w-full resize-none rounded-2xl border p-3 text-sm outline-none focus:border-wv-blue disabled:bg-wv-card",
+					family ? "border-wv-blue/30 bg-wv-blue-soft/50" : "border-wv-line bg-white",
+				)}
+			/>
+		</label>
+	);
+}
+
 /** Compact live voice card: orb, status, latest exchange, step progress. */
 export function VoiceCard({
 	record,
@@ -223,12 +269,14 @@ export function VoiceCard({
 	listening,
 	onOpenTranscript,
 	voiceSlot,
+	statusLabel,
 }: {
 	record: RoundRecord;
 	transcript: TranscriptLine[];
 	listening: boolean;
 	onOpenTranscript: () => void;
 	voiceSlot?: ReactNode;
+	statusLabel?: string;
 }) {
 	const locked = record.status === "signed";
 	const last = transcript[transcript.length - 1];
@@ -243,9 +291,13 @@ export function VoiceCard({
 					</span>
 				</span>
 				<div className="min-w-0 flex-1">
-					<p className="text-sm font-medium">{locked ? "Round signed" : listening ? "Listening…" : "Voice paused"}</p>
+					<p className="text-sm font-medium">{locked ? "Round signed" : (statusLabel ?? (listening ? "Listening…" : "Voice paused"))}</p>
 					<p className="line-clamp-2 text-xs text-white/80">
-						{last ? `${last.who === "agent" ? "WardVoice" : "You"}: ${last.text}` : 'Say the bed number to begin, e.g. "Bed 12".'}
+						{last
+							? `${last.who === "agent" ? "WardVoice" : "You"}: ${last.text}`
+							: locked
+								? `Locked by ${record.signed_by ?? "doctor"} at ${record.signed_at ?? ""}. Audit entry added.`
+								: 'Say the bed number to begin, e.g. "Bed 12".'}
 					</p>
 				</div>
 			</div>
@@ -314,6 +366,7 @@ export function RoundWorkspace({
 	listening,
 	actions,
 	voiceSlot,
+	statusLabel,
 	banner,
 	onOpenTranscript,
 }: {
@@ -323,6 +376,7 @@ export function RoundWorkspace({
 	listening: boolean;
 	actions: RoundActions;
 	voiceSlot?: ReactNode;
+	statusLabel?: string;
 	banner?: ReactNode;
 	onOpenTranscript: () => void;
 }) {
@@ -361,7 +415,7 @@ export function RoundWorkspace({
 
 			{banner}
 
-			<VoiceCard record={record} transcript={transcript} listening={listening} onOpenTranscript={onOpenTranscript} voiceSlot={voiceSlot} />
+			<VoiceCard record={record} transcript={transcript} listening={listening} onOpenTranscript={onOpenTranscript} voiceSlot={voiceSlot} statusLabel={statusLabel} />
 
 			<Section title="Vitals" state={s.vitals} onConfirm={() => actions.confirmSection("vitals")} locked={locked}>
 				<div className="grid grid-cols-2 gap-2">
@@ -431,30 +485,8 @@ export function RoundWorkspace({
 			</Section>
 
 			<Section title="Notes" state={s.notes} onConfirm={() => actions.confirmSection("notes")} locked={locked} aside={<Chip>Free text</Chip>}>
-				<label className="block">
-					<span className="mb-1 flex justify-between text-[11px] font-medium text-wv-muted">
-						Clinical note <span className="uppercase">internal</span>
-					</span>
-					<textarea
-						value={record.clinical_note}
-						disabled={locked}
-						onChange={(e) => actions.setNote("clinical_note", e.target.value)}
-						rows={3}
-						className="w-full resize-none rounded-2xl border border-wv-line bg-white p-3 text-sm outline-none focus:border-wv-blue disabled:bg-wv-card"
-					/>
-				</label>
-				<label className="mt-3 block">
-					<span className="mb-1 flex justify-between text-[11px] font-medium text-wv-muted">
-						Note for family <span className="uppercase text-wv-blue">sent in email</span>
-					</span>
-					<textarea
-						value={record.family_note}
-						disabled={locked}
-						onChange={(e) => actions.setNote("family_note", e.target.value)}
-						rows={3}
-						className="w-full resize-none rounded-2xl border border-wv-blue/30 bg-wv-blue-soft/50 p-3 text-sm outline-none focus:border-wv-blue disabled:bg-wv-card"
-					/>
-				</label>
+				<NoteField label="Clinical note" hint="internal" value={record.clinical_note} locked={locked} onSave={(v) => actions.setNote("clinical_note", v)} />
+				<NoteField label="Note for family" hint="sent in email" family value={record.family_note} locked={locked} onSave={(v) => actions.setNote("family_note", v)} />
 			</Section>
 
 			<Card className="p-4">

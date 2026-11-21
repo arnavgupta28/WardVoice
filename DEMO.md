@@ -1,42 +1,36 @@
-# Medi — Clinic Concierge (Build with Agora, Track 3)
+# WardVoice demo script (about 3 minutes)
 
-Voice agent that plans and completes a doctor booking end to end:
-search → check doctor slots + your calendar → propose → **you confirm** → book →
-recover if the slot is taken → add to calendar → send confirmation → set reminder.
+## Before going on stage
+1. `cloudflared tunnel --url http://localhost:8000` → put the URL in `MCP_ENDPOINT=…/mcp` in `server/.env.local`.
+2. `bun run dev`, then `curl -X POST localhost:8000/ward/reset`.
+3. Open two tabs: `/doctor/round/P1?as=doctor` and `/family?as=family`.
+4. Wear gloves for the visual: you never touch the screen after the first tap.
 
-Stack: Agora Conversational AI (Deepgram STT → OpenAI LLM → **Murf Falcon TTS**),
-tools served over **MCP** (`server/src/mcp_server.py`, logic in `server/src/clinic.py`),
-live "Agent actions" panel in the web UI.
+## Script
 
-## Run it
+| # | You say / do | What judges see |
+|---|---|---|
+| 0 | One line: "Touching tablets in sterile wards spreads infection. Families get no updates. WardVoice fixes both." Tap **Start voice round**. | Agent: "WardVoice ready. Say the bed number to begin." (Murf Falcon voice) |
+| 1 | "Bed 12." | Agent reads back "Ramesh Kumar, MRN ending 381. Correct?" |
+| 2 | "Correct." | Identity chip turns green |
+| 3 | "Pulse 88, BP 124 over 78, temp 37.2, sats 96, resp 18, pain 2." | Six vitals tiles fill in **amber** → read-back |
+| 4 | "Yes." | Vitals turn **green** |
+| 5 | "He's improving. Alert, soft diet, assisted mobility." → "Yes." | Status options light up → green |
+| 6 | "Switch ceftriaxone to oral cefuroxime 500 twice daily. Repeat chest X-ray tomorrow." → "Yes." | Two typed orders appear → green |
+| 7 | "Note for family: he's breathing more comfortably and his fever has settled." → "Yes." | Family note filled → green |
+| 8 | "Sign and send." → agent reads the whole round back → "Yes." | Card locks: "Family update emailed to 2 recipients" |
+| 9 | Switch to the family tab. | "How is Ramesh today?": Getting better, the doctor's note, vitals |
 
-1. Credentials in `server/.env.local`:
-   - `AGORA_APP_ID`, `AGORA_APP_CERTIFICATE` — Agora Console (project with Conversational AI enabled)
-   - `MURF_API_KEY` — Murf API dashboard. Check `MURF_VOICE_ID` against Murf's voice list.
-2. Public tunnel (Agora cloud must reach `/mcp`):
-   ```
-   cloudflared tunnel --url http://localhost:8000
-   ```
-   Copy the `https://….trycloudflare.com` URL → `MCP_ENDPOINT=https://….trycloudflare.com/mcp`
-   (the URL changes every time you restart cloudflared).
-3. `bun run dev` → open http://localhost:3000 → Start Conversation.
-4. Between runs, click **Reset demo** in the Agent actions panel.
+## If there is time (Adapt)
+- Say "temp 45": the agent rejects it as implausible and asks you to re-check.
+- Say "sats 86": it is flagged out of range and the agent asks for confirmation.
+- Reports tab: Bed 15 shows **no consent → nothing sent**. If you set a patient to *critical*, the email is **held** and the patient goes on the call-the-family list.
 
-Tests: `cd server && venv/bin/python -m pytest -q`
+## Talking points
+- Hands-free in sterile settings. Voice removes the input friction where touching is the problem.
+- Checked twice and deterministic: identity gate, range checks, fixed value lists, per-section and whole-round read-back. The agent never writes clinical content on its own.
+- 12+ coordinated MCP tool calls per round, plus human-in-the-loop sign-off enforced in the tool.
+- Follow-up after the call: family email, held for bad news, gated on consent, audit trail.
 
-## 2-minute stage script
-
-| You say | What the judges see in the panel |
-|---|---|
-| "I've had a skin rash for a week. Can you get me a dermatologist near Whitefield, sometime after 6 in the evening this week?" | Search doctors → Check doctor slots → Read your calendar (Team sync clash dropped) |
-| Medi proposes Dr. Kavya Rao, day, time, ₹800. You: "Yes, book it." | Book appointment → ⚠ SLOT_TAKEN |
-| Medi: "That slot just got taken — next is … Shall I book that?" You: "Yes." | Check doctor slots → Book appointment ✓ → Add to calendar → Send confirmation → Set reminder |
-| "Also WhatsApp the details to my mom." | Send confirmation (WhatsApp → Mom) |
-| *(optional)* "Actually move it to Saturday morning." | Check slots → Reschedule → Send confirmation |
-
-Talking points: ≥2 coordinated tool calls (we do 6+), human-in-the-loop approval enforced
-in the tool itself (`user_confirmed`), recovery from a failed action, follow-ups after the
-call, and emergency safety (chest pain → "call 112", no booking).
-
-The SLOT_TAKEN on the first booking is a deliberate demo switch (`DEMO_SIMULATE_SLOT_TAKEN=1`)
-so recovery shows every time — say so if asked; all data is mocked and in-memory.
+## Fallback if the venue Wi-Fi fails
+Play the recorded video. Or run `server/scripts/e2e_mcp_round.py`, which drives the same round through MCP, and show the UI updating live.

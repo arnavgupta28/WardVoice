@@ -33,8 +33,8 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/stopAgent`,
       },
       {
-        source: '/api/demo/:path*',
-        destination: `${backendUrl}/demo/:path*`,
+        source: '/api/ward/:path*',
+        destination: `${backendUrl}/ward/:path*`,
       },
     ]
   },

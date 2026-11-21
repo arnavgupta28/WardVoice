@@ -21,6 +21,7 @@ load_dotenv(os.path.join(_base_dir, '.env'), override=True)
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from agora_agent.agentkit.token import generate_convo_ai_token
 from agent import Agent
@@ -30,7 +31,7 @@ logger = logging.getLogger("uvicorn.error")
 # --- MCP mount (single-process): serve the FastMCP server in this same uvicorn ---
 from contextlib import asynccontextmanager
 import mcp_server  # exposes `mcp = FastMCP(...)`
-import clinic  # in-memory demo state behind the MCP tools
+import ward  # WardVoice domain shared by MCP tools (voice) and REST (touch)
 
 # FastMCP serves the streamable-HTTP app at its default /mcp path; mounting the app
 # at root lands the public endpoint at exactly /mcp (no trailing-slash redirect).
@@ -209,16 +210,38 @@ async def stop_agent(request: StopAgentRequest):
         raise _to_http_error(e)
 
 
-@router.get("/demo/state")
-async def demo_state():
-    """Live agent activity, bookings, calendar and sent messages for the dashboard."""
-    return clinic.snapshot()
+class WardActionRequest(BaseModel):
+    action: str
+    payload: Dict[str, Any] = {}
 
 
-@router.post("/demo/reset")
-async def demo_reset():
-    """Reset bookings/calendar/activity so the next demo run starts clean."""
-    clinic.reset()
+@router.get("/ward/state")
+async def ward_state():
+    """Patients, round records, reports — polled by the doctor and family apps."""
+    return ward.snapshot()
+
+
+@router.post("/ward/patients/{patient_id}/action")
+async def ward_action(patient_id: str, request: WardActionRequest):
+    """Touch fallback: same rules and audit trail as the voice tools."""
+    try:
+        return ward.apply_touch(patient_id, request.action, request.payload)
+    except (ward.WardError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/ward/reports/{report_id}/email.html")
+async def ward_email(report_id: str):
+    report = ward.report_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return HTMLResponse(ward.render_email(report)["html"])
+
+
+@router.post("/ward/reset")
+async def ward_reset():
+    """Reset the ward so the next demo run starts clean."""
+    ward.reset()
     return {"code": 0, "msg": "reset"}
 
 
