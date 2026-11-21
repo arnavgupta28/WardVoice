@@ -188,4 +188,8 @@ Optional. When the keys are not set, the app uses in-memory state and demo sign-
 - Auto-generated nursing shift handover.
 - Hospital SSO and per-ward consent management.
 
-Built on Agora's `recipe-agent-mcp` starter (MIT). See [PLAN.md](./PLAN.md) and [DEMO.md](./DEMO.md).
+## License
+
+**Proprietary. All rights reserved.** See [LICENSE](./LICENSE). No permission is granted to use, copy, modify or host this software without written permission.
+
+Started from Agora's `recipe-agent-mcp` starter (MIT); its notice is kept in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md). See [PLAN.md](./PLAN.md) and [DEMO.md](./DEMO.md).
