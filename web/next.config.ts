@@ -14,7 +14,11 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
-    const backendUrl = process.env.AGENT_BACKEND_URL?.replace(/\/$/, '')
+    // AGENT_BACKEND_URL wins. On Render, AGENT_BACKEND_HOST comes from the API service (`fromService … host`),
+    // which survives Render adding a random suffix to the service name (e.g. wardvoice-api-ab12).
+    const host = process.env.AGENT_BACKEND_HOST?.trim()
+    const fromHost = host ? (host.includes('.') ? `https://${host}` : `https://${host}.onrender.com`) : undefined
+    const backendUrl = (process.env.AGENT_BACKEND_URL || fromHost)?.replace(/\/$/, '')
     if (!backendUrl) {
       return []
     }

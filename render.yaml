@@ -42,9 +42,13 @@ services:
     buildCommand: bun install && bun run build
     startCommand: bun run start
     envVars:
-      # Public URL of wardvoice-api. If Render adds a suffix to the service name, update this and redeploy.
-      - key: AGENT_BACKEND_URL
-        value: https://wardvoice-api.onrender.com
+      # Hostname of wardvoice-api as Render actually named it (handles a random suffix); next.config.ts
+      # turns it into https://<host>.onrender.com. Set AGENT_BACKEND_URL instead to override.
+      - key: AGENT_BACKEND_HOST
+        fromService:
+          type: web
+          name: wardvoice-api
+          property: host
       - key: NODE_VERSION
         value: "22"
       # Optional Supabase Auth (real sign-in). NEXT_PUBLIC_* are baked in at build time: redeploy after setting.
