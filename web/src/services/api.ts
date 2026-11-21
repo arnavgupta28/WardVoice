@@ -41,8 +41,9 @@ export async function startAgent(
   rtcUid: number,
   userUid: number,
   agentMode: AgentMode = 'pipeline',
+  extra: { persona?: 'doctor' | 'family'; language?: string; patientId?: string } = {},
 ): Promise<string> {
-  const payload = { channelName, rtcUid, userUid, agentMode }
+  const payload = { channelName, rtcUid, userUid, agentMode, ...extra }
 
   const response = await fetch(`${API_BASE_URL}/startAgent`, {
     method: 'POST',

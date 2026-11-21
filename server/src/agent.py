@@ -61,6 +61,50 @@ def build_instructions() -> str:
     return AGENT_INSTRUCTIONS.format(today=n.strftime("%A %d %B %Y"), time=n.strftime("%H:%M"))
 
 
+# Family assistant: explains the signed daily update in the family's language. It gets NO tools,
+# so it can never write to the clinical record; it only sees the signed summary passed in `context`.
+# stt: Deepgram nova-3 handles English and Hindi directly; for the other languages the family can
+# speak English or Hindi ("multi") and the agent answers in their chosen language.
+FAMILY_LANGS: Dict[str, Dict[str, str]] = {
+    "en": {"name": "English", "stt": "en", "voice": "en-IN-priya", "locale": "en-IN",
+           "greeting": "Hello. I can explain today's update about your family member. What would you like to know?"},
+    "hi": {"name": "Hindi", "stt": "hi", "voice": "hi-IN-khyati", "locale": "hi-IN",
+           "greeting": "नमस्ते। मैं आज की रिपोर्ट को आसान भाषा में समझा सकती हूँ। आप क्या जानना चाहेंगे?"},
+    "kn": {"name": "Kannada", "stt": "multi", "voice": "kn-IN-harshitha", "locale": "kn-IN",
+           "greeting": "ನಮಸ್ಕಾರ. ಇಂದಿನ ವರದಿಯನ್ನು ಸರಳವಾಗಿ ವಿವರಿಸುತ್ತೇನೆ. ನೀವು ಏನು ತಿಳಿಯಲು ಬಯಸುತ್ತೀರಿ?"},
+    "ta": {"name": "Tamil", "stt": "multi", "voice": "ta-IN-karthikeyan", "locale": "ta-IN",
+           "greeting": "வணக்கம். இன்றைய அறிக்கையை எளிமையாக விளக்குகிறேன். நீங்கள் என்ன தெரிந்து கொள்ள விரும்புகிறீர்கள்?"},
+    "bn": {"name": "Bengali", "stt": "multi", "voice": "bn-IN-debarati", "locale": "bn-IN",
+           "greeting": "নমস্কার। আজকের রিপোর্ট সহজ ভাষায় বুঝিয়ে দিচ্ছি। আপনি কী জানতে চান?"},
+    "mr": {"name": "Marathi", "stt": "multi", "voice": "mr-IN-prajakta", "locale": "mr-IN",
+           "greeting": "नमस्कार. आजचा अहवाल सोप्या भाषेत समजावून सांगते. तुम्हाला काय जाणून घ्यायचे आहे?"},
+}
+
+FAMILY_INSTRUCTIONS = """You are WardVoice Family, a warm, patient helper for the family of a hospital patient.
+You are spoken aloud. Reply ONLY in {lang}, in short, simple sentences (2-3 sentences per turn). No jargon.
+Today: {today}.
+
+Your only source of truth is the signed daily update below, written by the patient's doctor.
+- Explain what the words and numbers in it mean in everyday language (e.g. "SpO2 96%" = oxygen level in the blood is good;
+  "BP 124 over 78" = blood pressure is in the normal range; "oral antibiotics" = medicine by mouth instead of a drip).
+- You may explain general medical terms in simple words, but NEVER give a diagnosis, prognosis, dose advice, or say anything
+  that is not in the update. Never guess about the future.
+- If asked something the update does not answer (when discharge is, whether to change treatment, test results not listed),
+  say kindly that the doctor or ward nurse can answer that, and mention they can tap the call button to reach the ward desk.
+- If the family sounds worried, acknowledge it gently before explaining.
+
+SIGNED DAILY UPDATE
+{context}
+"""
+
+
+def build_family_instructions(language: str, context: str) -> str:
+    from ward import now
+
+    lang = FAMILY_LANGS.get(language, FAMILY_LANGS["en"])
+    return FAMILY_INSTRUCTIONS.format(lang=lang["name"], today=now().strftime("%A %d %B %Y"), context=context)
+
+
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1/chat/completions"
 AgentMode = Literal["pipeline", "realtime"]
 
@@ -132,8 +176,15 @@ class Agent:
         user_uid: int,
         output_audio_codec: Optional[str] = None,
         agent_mode: AgentMode = "pipeline",
+        persona: str = "doctor",
+        language: str = "en",
+        family_context: str = "",
     ) -> Dict[str, Any]:
-        """Start a Pipeline or Realtime agent with MCP tool calling."""
+        """Start a Pipeline or Realtime agent: the doctor's scribe (MCP tools) or the family explainer (no tools)."""
+        family = persona == "family"
+        lang = FAMILY_LANGS.get(language, FAMILY_LANGS["en"])
+        if family and agent_mode != "pipeline":
+            raise ValueError("The family assistant runs in pipeline mode only")
         if not channel_name or not str(channel_name).strip():
             raise ValueError("channel_name is required and cannot be empty")
         if agent_uid <= 0:
@@ -156,9 +207,10 @@ class Agent:
         if isinstance(output_audio_codec, str) and output_audio_codec.strip():
             parameters["output_audio_codec"] = output_audio_codec.strip()
 
+        greeting = lang["greeting"] if family else self.greeting
         agent_options = {
             "client": self.client,
-            "greeting": self.greeting,
+            "greeting": greeting,
             "failure_message": "Please wait a moment.",
             "max_history": 50,
             "advanced_features": {"enable_rtm": True},
@@ -186,25 +238,33 @@ class Agent:
         agora_agent = AgoraAgent(**agent_options)
 
         if agent_mode == "pipeline":
-            llm_options = {
-                "model": self.openai_model,
-                "system_messages": [{"role": "system", "content": build_instructions()}],
-                "mcp_servers": mcp_servers,
-                "greeting_message": self.greeting,
-            }
+            if family:
+                llm_options = {
+                    "model": self.openai_model,
+                    "system_messages": [{"role": "system",
+                                         "content": build_family_instructions(language, family_context)}],
+                    "greeting_message": greeting,
+                }
+            else:
+                llm_options = {
+                    "model": self.openai_model,
+                    "system_messages": [{"role": "system", "content": build_instructions()}],
+                    "mcp_servers": mcp_servers,
+                    "greeting_message": self.greeting,
+                }
             if self.openai_api_key:
                 llm_options["api_key"] = self.openai_api_key
                 llm_options["base_url"] = (
                     self.openai_base_url or DEFAULT_OPENAI_BASE_URL
                 )
             llm = OpenAI(**llm_options)
-            stt = DeepgramSTT(model="nova-3", language="en")
+            stt = DeepgramSTT(model="nova-3", language=lang["stt"] if family else "en")
             if self.murf_api_key:
                 tts = MurfTTS(
                     key=self.murf_api_key,
                     model=self.murf_model,
-                    voice_id=self.murf_voice_id,
-                    locale=self.murf_locale,
+                    voice_id=lang["voice"] if family else self.murf_voice_id,
+                    locale=lang["locale"] if family else self.murf_locale,
                     base_url=self.murf_base_url,
                     sample_rate=24000,
                 )

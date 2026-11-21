@@ -102,6 +102,33 @@ class StartAgentRequest(BaseModel):
     userUid: int
     parameters: Optional[Dict[str, Any]] = None
     agentMode: Literal["pipeline", "realtime"] = "pipeline"
+    # "family" starts the read-only explainer for a patient's signed update, in the chosen language.
+    persona: Literal["doctor", "family"] = "doctor"
+    language: Literal["en", "hi", "kn", "ta", "bn", "mr"] = "en"
+    patientId: str = "P1"
+
+
+def family_context(patient_id: str) -> str:
+    """The latest signed-and-sent family update for one patient, as plain text for the family assistant."""
+    snap = ward.snapshot()
+    patient = next((p for p in snap.get("patients", []) if p.get("id") == patient_id), None)
+    reports = [r for r in snap.get("reports", []) if r.get("patient_id") == patient_id and r.get("status") == "sent"]
+    if not patient or not reports:
+        return "There is no signed update yet. Say the doctor will share one after the ward round."
+    r = sorted(reports, key=lambda x: (x.get("date", ""), x.get("signed_at", "")))[-1]
+    v = r.get("vitals") or {}
+    lines = [
+        f"Patient: {patient['name']}, {patient.get('age', '')}, {patient.get('ward', '')} bed {patient.get('bed', '')}.",
+        f"Reason for admission: {patient.get('diagnosis', '')}.",
+        f"Update date: {r.get('date')}, signed by {r.get('signed_by')} at {r.get('signed_at')}.",
+        f"Overall condition: {ward.CONDITIONS.get(r.get('condition'), r.get('condition'))}.",
+        "Vitals: " + ", ".join(f"{k}={val}" for k, val in v.items() if val is not None)
+        + " (hr = heart rate per minute, bp_sys/bp_dia = blood pressure, temp_c = temperature in Celsius,"
+          " spo2 = blood oxygen %, rr = breaths per minute, pain = 0 to 10).",
+        "Plan for today: " + ("; ".join(r.get("plan") or []) or "no changes."),
+        f"Note from the doctor to the family: {r.get('family_note') or 'none'}.",
+    ]
+    return "\n".join(lines)
 
 
 class StopAgentRequest(BaseModel):
@@ -180,6 +207,9 @@ async def start_agent(request: StartAgentRequest):
             user_uid=request.userUid,
             output_audio_codec=output_audio_codec,
             agent_mode=request.agentMode,
+            persona=request.persona,
+            language=request.language,
+            family_context=family_context(request.patientId) if request.persona == "family" else "",
         )
         return {"code": 0, "msg": "success", "data": result}
     except Exception as e:

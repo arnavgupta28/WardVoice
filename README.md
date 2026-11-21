@@ -59,6 +59,16 @@ Safeguards built into the tools, not just the prompt:
 - Every word the agent speaks uses **Murf Falcon** streaming TTS (`MurfTTS`, `model=FALCON`, Indian English voice), configured in `server/src/agent.py`.
 - The agent **refuses to start without `MURF_API_KEY`**, so it never silently falls back to another voice. The fallback exists only for local testing, behind `ALLOW_TTS_FALLBACK=1`.
 - Falcon's low latency matters here: per-section read-backs are spoken often, so a slow voice would stall the round.
+- The family assistant speaks **six Murf Falcon voices**: English (`en-IN-priya`), Hindi (`hi-IN-khyati`), Kannada (`kn-IN-harshitha`), Tamil (`ta-IN-karthikeyan`), Bengali (`bn-IN-debarati`) and Marathi (`mr-IN-prajakta`).
+
+## Family voice assistant (multilingual)
+
+The family app has a second Agora voice agent, **"Questions about these words?"**, that explains the signed update in plain language: what SpO₂ 96% means, what "oral antibiotics" means, what today's plan involves.
+
+- **Choose a language on the first visit:** English, हिन्दी, ಕನ್ನಡ, தமிழ், বাংলা or मराठी. The choice is remembered and can be changed on the card. English and Hindi are understood directly; for the others the family can ask in English or Hindi and the reply comes in their language.
+- **Read-only by design:** this agent is started with **no MCP tools**, so it cannot change the clinical record. Its only knowledge is the latest *signed and sent* report for that patient (`family_context()` in `server/src/server.py`). The internal clinical note is never included.
+- **Guard-rails in the prompt:** no diagnosis, prognosis or dose advice, and nothing that isn't in the update. For anything else it points the family to the doctor or the ward desk.
+- Started with `POST /startAgent {"persona": "family", "language": "kn", "patientId": "P1"}`. The code is in `FAMILY_LANGS` / `FAMILY_INSTRUCTIONS` (`server/src/agent.py`) and `web/src/wardvoice/FamilyAssistant.tsx`.
 
 ## Screens
 
@@ -145,11 +155,22 @@ Verified on event day: 19/19 backend tests, `bun run verify:web` builds all 9 ro
 
 Free instances sleep when idle, so open the API URL once about a minute before a demo.
 
+## Supabase (login and persistence)
+
+Optional. When the keys are not set, the app uses in-memory state and demo sign-in, exactly as in the local demo.
+
+- **Persistence:** `server/src/persistence.py` stores the whole ward state as one `jsonb` snapshot in `ward_state`, written by a background thread after every ward action and restored on startup. Restarts and free-tier sleeps don't lose rounds.
+- **Login:** Supabase Auth with email and password (`web/src/lib/supabase.ts`, `web/src/wardvoice/session.ts`). The role (doctor or family) comes from user metadata or `profiles`. The `?as=doctor` / `?as=family` demo links still work.
+- **Setup:**
+  1. Create a Supabase project and run `supabase/schema.sql` in the SQL editor.
+  2. Run `cd server && SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… venv/bin/python scripts/supabase_seed_users.py` to create the demo doctor (`kavya.rao@wardvoice.demo`) and family user (`anita.kumar@wardvoice.demo`).
+  3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on `wardvoice-api`, and `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` on `wardvoice-web` (redeploy the web service, since these are baked in at build time).
+
 ## Future scope
 
-- EHR write-back (FHIR `Observation`, `MedicationRequest`) instead of the in-memory ward.
-- Murf voice notes for families in Hindi and Kannada.
-- A family voice line that answers only from the signed summary.
+- EHR write-back (FHIR `Observation`, `MedicationRequest`) instead of a single ward snapshot.
+- Murf voice notes attached to the family email in the family's language.
+- Speech recognition in Kannada, Tamil, Bengali and Marathi (today these languages answer, and the family asks in English or Hindi).
 - Auto-generated nursing shift handover.
 - Hospital SSO and per-ward consent management.
 
