@@ -18,6 +18,8 @@ Build with Agora, Bengaluru 2026 · Track 3: AI Agents That Get Things Done.
 >
 > It runs on Render's free tier, so the first visit after a quiet spell can take about a minute to wake up.
 
+<p align="center"><img src="docs/screenshots/wardvoice_qr.png" width="180" alt="QR code for https://wardvoice-web.onrender.com"><br><sub>Scan to open WardVoice on your phone</sub></p>
+
 ## Demo video
 
 <p align="center">
